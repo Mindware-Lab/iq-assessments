@@ -24,7 +24,9 @@
   <script type="text/babel">
     const { useState } = React;
 
-    // Item definitions
+    // Item definitions – SgS-12 Form A
+    // Matrix items (ICAR q-IDs in comments):
+    // AM1 = q12043 (D), AM2 = q12044 (C), AM3 = q12054 (A), AM4 = q12056 (E), AM5 = q12050 (E)
     const ITEMS = [
       // Matrices
       {
@@ -32,72 +34,77 @@
         kind: 'matrix',
         stemImageUrl: './images/matrices/AM1.jpg',
         responseOptions: ['A', 'B', 'C', 'D', 'E', 'F', 'None of these', "I don't know"],
-        correctOptionIndex: 3,
+        correctOptionIndex: 3, // D
       },
       {
         id: 'AM2',
         kind: 'matrix',
         stemImageUrl: './images/matrices/AM2.jpg',
         responseOptions: ['A', 'B', 'C', 'D', 'E', 'F', 'None of these', "I don't know"],
-        correctOptionIndex: 2,
+        correctOptionIndex: 2, // C
       },
       {
         id: 'AM3',
         kind: 'matrix',
         stemImageUrl: './images/matrices/AM3.jpg',
         responseOptions: ['A', 'B', 'C', 'D', 'E', 'F', 'None of these', "I don't know"],
-        correctOptionIndex: 4,
+        correctOptionIndex: 0, // A (FIXED)
       },
       {
         id: 'AM4',
         kind: 'matrix',
         stemImageUrl: './images/matrices/AM4.jpg',
         responseOptions: ['A', 'B', 'C', 'D', 'E', 'F', 'None of these', "I don't know"],
-        correctOptionIndex: 0,
+        correctOptionIndex: 4, // E (FIXED)
       },
       {
         id: 'AM5',
         kind: 'matrix',
         stemImageUrl: './images/matrices/AM5.jpg',
         responseOptions: ['A', 'B', 'C', 'D', 'E', 'F', 'None of these', "I don't know"],
-        correctOptionIndex: 4,
+        correctOptionIndex: 4, // E
       },
       // Verbal reasoning
       {
         id: 'VR1',
         kind: 'verbal',
-        stemText: 'Joshua is 12 years old and his sister is three times as old as he. When Joshua is 23 years old, how old will his sister be?',
+        stemText:
+          'Joshua is 12 years old and his sister is three times as old as he. When Joshua is 23 years old, how old will his sister be?',
         responseOptions: ['35', '39', '44', '47', '53', '57', 'None of these', "I don't know"],
-        correctOptionIndex: 3,
+        correctOptionIndex: 3, // 47
       },
       {
         id: 'VR2',
         kind: 'verbal',
-        stemText: 'What number is one fifth of one fourth of one ninth of 900?',
+        stemText:
+          'What number is one fifth of one fourth of one ninth of 900?',
         responseOptions: ['2', '3', '4', '5', '6', '7', 'None of these', "I don't know"],
-        correctOptionIndex: 3,
+        correctOptionIndex: 3, // 5
       },
       {
         id: 'VR3',
         kind: 'verbal',
-        stemText: 'Please mark the word that does not match the other words: (1) Sycamore (2) Buckeye (3) Elm (4) Daffodil (5) Hickory (6) Sequoia',
+        stemText:
+          'Please mark the word that does not match the other words: (1) Sycamore (2) Buckeye (3) Elm (4) Daffodil (5) Hickory (6) Sequoia',
         responseOptions: ['1', '2', '3', '4', '5', '6', 'None of these', "I don't know"],
-        correctOptionIndex: 3,
+        correctOptionIndex: 3, // 4 (Daffodil)
       },
       // Series
       {
         id: 'SR1',
         kind: 'series',
-        stemText: 'In the following number series, what number comes next? 64, 81, 100, 121, 144, …',
+        stemText:
+          'In the following number series, what number comes next? 64, 81, 100, 121, 144, …',
         responseOptions: ['154', '156', '162', '169', '178', '196', 'None of these', "I don't know"],
-        correctOptionIndex: 3,
+        correctOptionIndex: 3, // 169
       },
       {
         id: 'SR2',
         kind: 'series',
-        stemText: 'In the following alphanumeric series, what letter comes next? Q, S, N, P, L, …',
+        stemText:
+          'In the following alphanumeric series, what letter comes next? Q, S, N, P, L, …',
         responseOptions: ['J', 'H', 'I', 'N', 'M', 'L', 'None of these', "I don't know"],
-        correctOptionIndex: 0,
+        correctOptionIndex: 0, // J (as currently keyed)
       },
       // 3D rotation
       {
@@ -116,7 +123,7 @@
       },
     ];
 
-    // Scoring functions
+    // Scoring and interpretation functions
     function getBand(raw) {
       if (raw <= 3) return 'low';
       if (raw <= 7) return 'typical';
@@ -143,7 +150,7 @@
     function getBandDescription(band) {
       const descriptions = {
         low: 'Your score falls below the typical adult range. This could reflect tiredness, anxiety, unfamiliarity with the test format, or genuine difficulty with abstract reasoning. Consider retaking the test under less stressful conditions if you suspect external factors affected your performance.',
-        typical: 'Your score falls within the broad typical range. You demonstrate reasonable ability to spot patterns and solve novel problems. This is representative of most adults tested.',
+        typical: 'Your score falls within the broad typical range. You demonstrate reasonable ability to spot patterns and solve novel problems. This is representative of many adults tested on this kind of task.',
         high: 'Your score is above average. You found the pattern puzzles fairly natural once the format became clear. You perform well on abstract reasoning tasks.',
         veryHigh: 'Your score is in the very high range, indicating strong abstract reasoning ability. At this level, small differences in raw scores are not particularly meaningful.',
       };
@@ -159,8 +166,8 @@
               Short g Scale – SgS-12 A
             </h1>
             <p className="text-gray-600 text-lg mb-8 text-center leading-relaxed">
-              A 12-item reasoning snapshot measuring matrices, verbal, series and 3D rotation. 
-              There are no time limits, but most people finish in 5–10 minutes.
+              A 12-item reasoning snapshot measuring matrices, verbal, series and 3D rotation.
+              There are no time limits, but most people finish in around 5–10 minutes.
             </p>
             <button
               onClick={onStart}
@@ -174,7 +181,15 @@
     }
 
     // Item screen
-    function ItemScreen({ item, itemIndex, totalItems, selectedOption, onSelectOption, onNext, onPrev }) {
+    function ItemScreen({
+      item,
+      itemIndex,
+      totalItems,
+      selectedOption,
+      onSelectOption,
+      onNext,
+      onPrev,
+    }) {
       const isAnswered = selectedOption !== null;
       const isLast = itemIndex === totalItems - 1;
 
@@ -270,14 +285,14 @@
                   {rawScore}
                 </div>
                 <div className="text-gray-600 font-medium">
-                  Raw Score (out of 12)
+                  Raw score (out of 12)
                 </div>
               </div>
 
               {/* Band interpretation */}
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-gray-800 mb-3">
-                  Score Band: {bandLabel}
+                  Score band: {bandLabel}
                 </h3>
                 <p className="text-gray-700 leading-relaxed">
                   {description}
@@ -291,12 +306,12 @@
                     RS-IQ {iq}
                   </div>
                   <div className="text-gray-600 font-medium text-sm">
-                    Reasoning Snapshot IQ equivalent
+                    Reasoning Snapshot IQ-equivalent
                   </div>
                 </div>
                 <div className="text-xs text-gray-600 text-center mt-4 pt-4 border-t border-blue-200">
-                  RS-IQ is an internal Reasoning Snapshot IQ-equivalent score, based on adult 
-                  internet-sample norms. It is not a clinical IQ score and should not be 
+                  RS-IQ is an internal Reasoning Snapshot IQ-equivalent score, based on adult
+                  internet-sample norms. It is not a clinical IQ score and should not be
                   interpreted as a WAIS score.
                 </div>
               </div>
@@ -355,13 +370,7 @@
         if (currentItemIndex < ITEMS.length - 1) {
           setCurrentItemIndex(currentItemIndex + 1);
         } else {
-          // Calculate score and show results
-          const rawScore = answers.reduce((sum, answer, idx) => {
-            if (answer === ITEMS[idx].correctOptionIndex) {
-              return sum + 1;
-            }
-            return sum;
-          }, 0);
+          // Finished: show results (rawScore computed in render)
           setScreen('results');
         }
       };
@@ -406,6 +415,8 @@
         }, 0);
         return <ResultsScreen rawScore={rawScore} onRestart={handleRestart} />;
       }
+
+      return null;
     }
 
     // Render
