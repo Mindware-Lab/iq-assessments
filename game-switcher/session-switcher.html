@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Session Switcher (Standalone)</title>
+
+    <!-- Tailwind (CDN) for the utility classes used in your component -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React + ReactDOM (UMD) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel to allow JSX in this single-file demo -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+      html, body { height: 100%; }
+      body { margin: 0; background: #E0E0E0; }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState } = React;
+
+      const SessionSwitcher = () => {
+        const [screen, setScreen] = useState('postBreath');
+        const [postBreathState, setPostBreathState] = useState(null);
+        const [trained3, setTrained3] = useState(null);
+        const [progress, setProgress] = useState(null);
+        const [routine, setRoutine] = useState(null);
+        const [robustness, setRobustness] = useState(null);
+        const [click, setClick] = useState(null);
+        const [clickNote, setClickNote] = useState('');
+        const [showClickInput, setShowClickInput] = useState(false);
+        const [deploy, setDeploy] = useState(null);
+        const [breaksFirst, setBreaksFirst] = useState(null);
+        const [swapChoice, setSwapChoice] = useState(null);
+        const [swapStrategy, setSwapStrategy] = useState(null);
+        const [recommendation, setRecommendation] = useState(null);
+        const [sessionFeel, setSessionFeel] = useState(null);
+        const [carryOver, setCarryOver] = useState(null);
+        const [spikeGap, setSpikeGap] = useState(null);
+
+        const calcRec = () => {
+          const zone = postBreathState;
+
+          if (trained3 === 'no') {
+            return {
+              planType: zone === 'psi' ? 'anchor_light' : 'anchor_stabilise',
+              game: 'anchor_noncat',
+              wheelAdvances: true
+            };
+          }
+
+          const stalled =
+            (progress === 'plateau' || progress === 'unsure') &&
+            click === 'no' &&
+            spikeGap === 'long' &&
+            robustness !== 'improved';
+
+          const unstableOrFlat =
+            zone === 'subcritical' || zone === 'super_rigid' || zone === 'super_scattered';
+
+          // NEW: outside Ψ + stalled => one-day Classic swap as an easier "reset"
+          if (unstableOrFlat && stalled) {
+            return { planType: 'swap_variant', game: 'classic', wheelAdvances: false };
+          }
+
+          // keep existing gate
+          if (zone !== 'psi') {
+            return { planType: 'anchor_stabilise', game: 'anchor_noncat', wheelAdvances: true };
+          }
+
+          if (click === 'yes') return { planType: 'anchor_consolidate', game: 'anchor_noncat', wheelAdvances: true };
+
+          if ((deploy === 'yes' || deploy === 'somewhat') && robustness !== 'worse') {
+            return { planType: 'anchor_consolidate', game: 'anchor_noncat', wheelAdvances: true };
+          }
+
+          // existing swap logic for Ψ-band
+          if (routine === 'very' && (progress === 'unsure' || progress === 'plateau') && robustness !== 'improved') {
+            let game = 'classic';
+            if (breaksFirst === 'rule_mapping') game = 'logic_gated';
+            else if (breaksFirst === 'emotional') game = 'emotional';
+            return { planType: 'swap_variant', game, wheelAdvances: false };
+          }
+
+          if (progress === 'plateau' && (robustness === 'same' || robustness === 'worse')) {
+            return {
+              planType: (routine === 'somewhat' || routine === 'very') ? 'anchor_probe' : 'anchor_build',
+              game: 'anchor_noncat',
+              wheelAdvances: true
+            };
+          }
+
+          return { planType: 'anchor_build', game: 'anchor_noncat', wheelAdvances: true };
+        };
+
+        const names = {
+          anchor_light: "Anchor session (light)",
+          anchor_stabilise: "Anchor session (wheel step)",
+          anchor_build: "Anchor session (wheel step)",
+          anchor_probe: "Anchor session (probe)",
+          anchor_consolidate: "Anchor session (consolidate)",
+          swap_variant: "Swap session (variant today)"
+        };
+
+        const recipes = {
+          anchor_light: "Keep it simple today: play the Anchor with default settings. Keep the wrapper stable. Aim for a clean run.",
+          anchor_stabilise: "Anchor only. Easy-to-moderate difficulty. Keep the wrapper stable. Light interference only. No speed shifts. No hand/response switching.",
+          anchor_build: "Anchor only. Keep it mostly stable. Add ONE mild change today: either 1 slightly faster block OR 1 slightly higher-interference block. Don't stack changes.",
+          anchor_probe: "Anchor only. Add 1–2 higher-interference blocks. Keep speed stable. Hand/response switching only if you're stable and you've already been training for a while.",
+          anchor_consolidate: "Anchor only. Stable wrapper. Minimal interference. No speed shifts. No switching. Repeat yesterday's approach and keep it clean.",
+          swap_variant: "Play one Swap game today instead of the Anchor. Keep settings stable. Tomorrow, return to the Anchor for a rebound test."
+        };
+
+        const swapGames = [
+          { id: 'classic', title: 'Classic (tempo / dual-load)', bestWhen: 'Best when you fall behind, start guessing, or one stream drops out.', strategies: ['comprehension', 'strategic_action'] },
+          { id: 'logic_gated', title: 'Logic-gated (rule discipline)', bestWhen: 'Best when rule/mapping changes break you, or switching causes confusion.', strategies: ['argumentation'] },
+          { id: 'emotional', title: 'Emotional (salience control)', bestWhen: 'Best when distraction, rumination, or affect hijacks attention.', strategies: ['mental_attitude', 'decision_making'] }
+        ];
+
+        if (screen === 'postBreath') {
+          const states = [
+            { id: 'subcritical', label: 'Subcritical (flat/demotivated)', color: '#22AAFF' },
+            { id: 'psi', label: 'Ψ-band (in the zone)', color: '#CCFF66' },
+            { id: 'super_rigid', label: 'Supercritical: rigid control', color: '#FFB020' },
+            { id: 'super_scattered', label: 'Supercritical: scattered explore', color: '#B07CFF' },
+            { id: 'mixed', label: 'Mixed / unclear', color: '#6D6D6D' }
+          ];
+
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>How do you feel now?</h1>
+                  <p className="mb-6" style={{ color: '#6D6D6D' }}>You've completed 3 minutes of breathing. Where are you at now?</p>
+                  <div className="space-y-3 mb-6">
+                    {states.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => setPostBreathState(s.id)}
+                        className="w-full p-4 rounded-lg border-2 font-semibold text-left transition-all"
+                        style={{
+                          borderColor: postBreathState === s.id ? s.color : '#E0E0E0',
+                          backgroundColor: postBreathState === s.id ? `${s.color}20` : '#FFFFFF',
+                          color: '#333333'
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-sm mb-6" style={{ color: '#6D6D6D' }}>If you're not sure, choose 'Mixed / unclear'.</p>
+                  <button
+                    onClick={() => postBreathState && setScreen('eligibility')}
+                    disabled={!postBreathState}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+                    style={{
+                      backgroundColor: postBreathState ? '#2764B7' : '#E0E0E0',
+                      color: postBreathState ? '#FFFFFF' : '#6D6D6D',
+                      cursor: postBreathState ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (screen === 'eligibility') {
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>Quick check</h1>
+                  <p className="mb-6" style={{ color: '#6D6D6D' }}>Have you done at least 3 training sessions before today?</p>
+                  <div className="space-y-3 mb-6">
+                    {['yes', 'no'].map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => setTrained3(opt)}
+                        className="w-full p-4 rounded-lg border-2 font-semibold transition-all capitalize"
+                        style={{
+                          borderColor: trained3 === opt ? '#2764B7' : '#E0E0E0',
+                          backgroundColor: trained3 === opt ? '#E8F4FF' : '#FFFFFF',
+                          color: '#333333'
+                        }}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-sm mb-6" style={{ color: '#6D6D6D' }}>If this is your first few sessions, we keep it simple.</p>
+                  <button
+                    onClick={() => {
+                      if (!trained3) return;
+                      if (trained3 === 'no') {
+                        setRecommendation(calcRec());
+                        setScreen('recommendation');
+                      } else {
+                        setScreen('lastSessions');
+                      }
+                    }}
+                    disabled={!trained3}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+                    style={{
+                      backgroundColor: trained3 ? '#2764B7' : '#E0E0E0',
+                      color: trained3 ? '#FFFFFF' : '#6D6D6D',
+                      cursor: trained3 ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (screen === 'lastSessions') {
+          const canContinue = progress && routine && robustness && click && deploy && spikeGap;
+
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>Last 2–3 sessions</h1>
+                  <p className="mb-6" style={{ color: '#6D6D6D' }}>Answer quickly based on your last couple of sessions.</p>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did you make progress?</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'clear', label: 'Yes, clear progress' },
+                        { id: 'unsure', label: 'A bit / unsure' },
+                        { id: 'plateau', label: 'No, plateau' }
+                      ].map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() => setProgress(o.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: progress === o.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: progress === o.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did it feel routine and automatic?</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'not', label: 'Not really' },
+                        { id: 'somewhat', label: 'Somewhat' },
+                        { id: 'very', label: 'Very routine' }
+                      ].map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() => setRoutine(o.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: routine === o.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: routine === o.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did your performance hold up when you changed settings in the Anchor game?</p>
+                    <p className="text-sm mb-3" style={{ color: '#6D6D6D' }}>Changes = speed, interference, or hand/response mapping.</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'improved', label: 'Improved' },
+                        { id: 'same', label: 'Same as usual' },
+                        { id: 'worse', label: 'Worse / fragile' }
+                      ].map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() => setRobustness(o.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: robustness === o.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: robustness === o.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did anything 'click' recently?</p>
+                    <div className="space-y-2 mb-3">
+                      <button
+                        onClick={() => { setClick('yes'); setShowClickInput(true); }}
+                        className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                        style={{
+                          borderColor: click === 'yes' ? '#2764B7' : '#E0E0E0',
+                          backgroundColor: click === 'yes' ? '#E8F4FF' : '#FFFFFF',
+                          color: '#333333'
+                        }}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => { setClick('no'); setShowClickInput(false); setClickNote(''); }}
+                        className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                        style={{
+                          borderColor: click === 'no' ? '#2764B7' : '#E0E0E0',
+                          backgroundColor: click === 'no' ? '#E8F4FF' : '#FFFFFF',
+                          color: '#333333'
+                        }}
+                      >
+                        No
+                      </button>
+                    </div>
+
+                    {showClickInput && (
+                      <div className="p-4 rounded-lg" style={{ backgroundColor: '#F5F5F5' }}>
+                        <label className="block text-sm font-semibold mb-2" style={{ color: '#333333' }}>What changed? (one line)</label>
+                        <p className="text-xs mb-2" style={{ color: '#6D6D6D' }}>Keep it simple. What did you do differently?</p>
+                        <input
+                          type="text"
+                          value={clickNote}
+                          onChange={(e) => setClickNote(e.target.value)}
+                          placeholder="E.g., 'I slowed down', 'I stopped guessing'..."
+                          className="w-full p-3 rounded border-2 mb-3"
+                          style={{ borderColor: '#E0E0E0' }}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowClickInput(false)}
+                            className="flex-1 py-2 px-4 rounded-lg font-semibold"
+                            style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}
+                          >
+                            Save and continue
+                          </button>
+                          <button
+                            onClick={() => { setClickNote(''); setShowClickInput(false); }}
+                            className="flex-1 py-2 px-4 rounded-lg font-semibold border-2"
+                            style={{ borderColor: '#E0E0E0', color: '#333333', backgroundColor: '#FFFFFF' }}
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did your strategy help outside the game since your last session?</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'yes', label: 'Yes' },
+                        { id: 'somewhat', label: 'Somewhat' },
+                        { id: 'no', label: 'No' },
+                        { id: 'didnt_try', label: "Didn't try" }
+                      ].map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() => setDeploy(o.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: deploy === o.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: deploy === o.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>When was your last step-change session?</p>
+                    <p className="text-sm mb-3" style={{ color: '#6D6D6D' }}>A step-change = a clear jump, a 'click', or holding up much better under changes.</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'recent', label: 'In the last 1–2 sessions' },
+                        { id: 'mid', label: 'About 3–4 sessions ago' },
+                        { id: 'long', label: "Not recently / can't remember" }
+                      ].map(o => (
+                        <button
+                          key={o.id}
+                          onClick={() => setSpikeGap(o.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: spikeGap === o.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: spikeGap === o.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (!canContinue) return;
+                      const r = calcRec();
+                      if (r.planType === 'swap_variant' && postBreathState === 'psi' && !breaksFirst) {
+                        setScreen('breakdown');
+                      } else {
+                        setRecommendation(r);
+                        setScreen('recommendation');
+                      }
+                    }}
+                    disabled={!canContinue}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+                    style={{
+                      backgroundColor: canContinue ? '#2764B7' : '#E0E0E0',
+                      color: canContinue ? '#FFFFFF' : '#6D6D6D',
+                      cursor: canContinue ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Get my plan
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (screen === 'breakdown') {
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>One more thing</h1>
+                  <p className="mb-6" style={{ color: '#6D6D6D' }}>When things break down, what breaks first?</p>
+                  <div className="space-y-3 mb-6">
+                    {[
+                      { id: 'tempo', label: 'Keeping up (tempo / speed)' },
+                      { id: 'rule_mapping', label: 'Rules or mapping (I get confused)' },
+                      { id: 'emotional', label: 'Emotional pull (rumination / distraction)' },
+                      { id: 'not_sure', label: 'Not sure' }
+                    ].map(o => (
+                      <button
+                        key={o.id}
+                        onClick={() => setBreaksFirst(o.id)}
+                        className="w-full p-4 rounded-lg border-2 font-semibold text-left transition-all"
+                        style={{
+                          borderColor: breaksFirst === o.id ? '#2764B7' : '#E0E0E0',
+                          backgroundColor: breaksFirst === o.id ? '#E8F4FF' : '#FFFFFF',
+                          color: '#333333'
+                        }}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!breaksFirst) return;
+                      setRecommendation(calcRec());
+                      setScreen('recommendation');
+                    }}
+                    disabled={!breaksFirst}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+                    style={{
+                      backgroundColor: breaksFirst ? '#2764B7' : '#E0E0E0',
+                      color: breaksFirst ? '#FFFFFF' : '#6D6D6D',
+                      cursor: breaksFirst ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Show my plan
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (screen === 'recommendation' && recommendation) {
+          const isSwap = recommendation.planType === 'swap_variant';
+          const finalGame = swapChoice || recommendation.game;
+
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-3xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-4" style={{ color: '#333333' }}>Today's plan</h1>
+                  <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#E8F4FF', border: '2px solid #2764B7' }}>
+                    <p className="font-semibold" style={{ color: '#333333' }}>Keep this page open. When you finish training, come back here for a 20-second wrap-up.</p>
+                  </div>
+
+                  <h2 className="text-2xl font-bold mb-6" style={{ color: '#2764B7' }}>{names[recommendation.planType]}</h2>
+
+                  <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#F5F5F5' }}>
+                    <p className="font-semibold" style={{ color: '#333333' }}>
+                      {recommendation.wheelAdvances
+                        ? "This counts towards your 20 Anchor sessions and advances the wheel."
+                        : "This does NOT advance the wheel. Next session returns to the Anchor and repeats the same wheel unit."}
+                    </p>
+                  </div>
+
+                  <div className="mb-6">
+                    <h3 className="font-bold mb-2" style={{ color: '#333333' }}>What to play</h3>
+                    <p className="mb-2" style={{ color: '#333333' }}>
+                      {isSwap ? "Play today: Choose a Swap game below (recommended highlighted)." : "Play today: Non-categorical dual n-back (Anchor)."}
+                    </p>
+                    <p className="text-sm" style={{ color: '#6D6D6D' }}>Keep settings stable today. The point is a clean probe, not maximum difficulty.</p>
+                  </div>
+
+                  <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#F5FFE6', border: '1px solid #CCFF66' }}>
+                    <p style={{ color: '#333333' }}>{recipes[recommendation.planType]}</p>
+                    {isSwap && <p className="mt-2 font-semibold" style={{ color: '#333333' }}>Swap sessions are usually just one day. Tomorrow's Anchor session is where we check if it helped.</p>}
+                  </div>
+
+                  {isSwap && (
+                    <div className="mb-6">
+                      <p className="font-semibold mb-4" style={{ color: '#333333' }}>
+                        Recommended: {recommendation.game === 'classic' ? 'Classic' : recommendation.game === 'logic_gated' ? 'Logic-gated' : 'Emotional'}
+                      </p>
+                      <p className="text-sm mb-4" style={{ color: '#6D6D6D' }}>You can follow the recommendation, or choose a different swap game below.</p>
+
+                      <div className="space-y-3">
+                        {swapGames.map(g => (
+                          <div
+                            key={g.id}
+                            onClick={() => { setSwapChoice(g.id); setSwapStrategy(null); }}
+                            className="p-4 rounded-lg border-2 cursor-pointer transition-all"
+                            style={{
+                              borderColor: finalGame === g.id ? '#2764B7' : '#E0E0E0',
+                              backgroundColor: finalGame === g.id ? '#E8F4FF' : '#FFFFFF'
+                            }}
+                          >
+                            <p className="font-bold mb-1" style={{ color: '#333333' }}>
+                              {g.title} {recommendation.game === g.id && !swapChoice && <span style={{ color: '#2764B7' }}>(Recommended)</span>}
+                            </p>
+                            <p className="text-sm mb-2" style={{ color: '#6D6D6D' }}>{g.bestWhen}</p>
+
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              {g.strategies.map(s => (
+                                <button
+                                  key={s}
+                                  onClick={(e) => { e.stopPropagation(); setSwapChoice(g.id); setSwapStrategy(s); }}
+                                  className="px-3 py-1 rounded text-sm border-2 transition-all"
+                                  style={{
+                                    borderColor: (swapStrategy === s && finalGame === g.id) ? '#2764B7' : '#E0E0E0',
+                                    backgroundColor: (swapStrategy === s && finalGame === g.id) ? '#2764B7' : '#FFFFFF',
+                                    color: (swapStrategy === s && finalGame === g.id) ? '#FFFFFF' : '#333333'
+                                  }}
+                                >
+                                  {s.replace('_', ' ')}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setScreen('afterTraining')}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all shadow-md"
+                    style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}
+                  >
+                    Start training - click when you have completed your capacity-strategy training session
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (screen === 'afterTraining') {
+          return (
+            <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+              <div className="max-w-2xl mx-auto">
+                <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+                  <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>After-training wrap-up</h1>
+                  <p className="mb-6" style={{ color: '#6D6D6D' }}>Quick reflection (20 seconds). Then set one real-life try before your next session.</p>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>How did today's session feel overall?</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'smooth', label: 'Smooth and productive' },
+                        { id: 'ok', label: 'OK / mixed' },
+                        { id: 'struggle', label: 'Struggled / off' }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setSessionFeel(opt.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: sessionFeel === opt.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: sessionFeel === opt.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did the n-back session carry over into the strategy practice?</p>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'yes_clearer', label: 'Yes — clearer thinking' },
+                        { id: 'yes_focus', label: 'Yes — better focus / steadier' },
+                        { id: 'no_separate', label: 'No — it felt separate today' },
+                        { id: 'no_practice', label: "I didn't do the strategy practice" }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setCarryOver(opt.id)}
+                          className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: carryOver === opt.id ? '#2764B7' : '#E0E0E0',
+                            backgroundColor: carryOver === opt.id ? '#E8F4FF' : '#FFFFFF',
+                            color: '#333333'
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-sm mt-2" style={{ color: '#6D6D6D' }}>Carry over = you could apply the operator more cleanly right after training.</p>
+                  </div>
+
+                  <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#FFF9E6', border: '1px solid #FFD700' }}>
+                    <p className="text-sm" style={{ color: '#333333' }}>
+                      💡 Before your next session, try the same mindware strategy once in real life. Think about the situation you might apply it in now, and what might cue it for you.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setScreen('postBreath');
+                      setRecommendation(null);
+                      setPostBreathState(null);
+                      setTrained3(null);
+                      setProgress(null);
+                      setRoutine(null);
+                      setRobustness(null);
+                      setClick(null);
+                      setClickNote('');
+                      setDeploy(null);
+                      setBreaksFirst(null);
+                      setSwapChoice(null);
+                      setSwapStrategy(null);
+                      setSessionFeel(null);
+                      setCarryOver(null);
+                      setSpikeGap(null);
+                    }}
+                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+                    style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<SessionSwitcher />);
+    </script>
+  </body>
+</html>
