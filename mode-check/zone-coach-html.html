@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zone Coach - Mindware Lab</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    const PROTOTYPES = {
+      SUB: { E: 2, S: 3, F: 4, N: 5, O: 3, C: 3, R: 7 },
+      PSI: { E: 5, S: 3, F: 8, N: 2, O: 4, C: 3, R: 2 },
+      ENT: { E: 6, S: 6, F: 5, N: 8, O: 7, C: 8, R: 3 },
+      MIT: { E: 6, S: 8, F: 8, N: 3, O: 7, C: 2, R: 9 },
+      DEP: { E: 2, S: 7, F: 4, N: 7, O: 8, C: 6, R: 6 }
+    };
+
+    const WEIGHTS = { E: 0.08, S: 0.10, F: 0.20, N: 0.18, O: 0.14, C: 0.10, R: 0.20 };
+    const TAU = 6;
+
+    const MODE_LABELS = {
+      SUB: 'Subcritical',
+      PSI: 'In the zone',
+      ENT: 'Supercritical - scattered',
+      MIT: 'Supercritical - rigid',
+      DEP: 'Depleted overload'
+    };
+
+    const BREATH_PATTERNS = {
+      upshift: {
+        id: 'upshift',
+        name: 'Upshift',
+        description: 'Inhale-led breathing to gently raise engagement',
+        attentionCue: 'Anchor attention on the in-breath sensation. Return gently when distracted.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: [
+          ...Array.from({ length: 10 }, () => [
+            { label: 'Inhale', durationMs: 2000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+          ]).flat(),
+          ...Array.from({ length: 14 }, () => [
+            { label: 'Inhale', durationMs: 3000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+          ]).flat(),
+          ...Array.from({ length: 10 }, () => [
+            { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 3000, kind: 'exhale' }
+          ]).flat()
+        ]
+      },
+      amplify: {
+        id: 'amplify',
+        name: 'Amplify',
+        description: 'Slow-paced breathing to stabilise',
+        attentionCue: 'Track the smooth rhythm. Thoughts are normal. Notice them and return to the breath.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: Array.from({ length: 18 }, () => [
+          { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
+          { label: 'Exhale', durationMs: 6000, kind: 'exhale' }
+        ]).flat()
+      },
+      downshift: {
+        id: 'downshift',
+        name: 'Downshift',
+        description: 'Cyclic sighing to reduce arousal and overload',
+        attentionCue: 'Count the pattern: sip, sip, long sigh. If your mind races, return to the count.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: Array.from({ length: 20 }, () => [
+          { label: 'Inhale (1)', durationMs: 1000, kind: 'inhale' },
+          { label: 'Inhale (2)', durationMs: 1000, kind: 'inhale' },
+          { label: 'Sigh out', durationMs: 7000, kind: 'exhale' }
+        ]).flat()
+      }
+    };
+
+    const SLIDERS = [
+      { key: 'E', label: 'Energy', desc: 'How much usable energy do you have right now to start and keep going?' },
+      { key: 'S', label: 'Tension', desc: 'How tense or "on edge" do you feel in your body and mind?' },
+      { key: 'F', label: 'Focus steadiness', desc: 'How easy is it to stay with one thing without forcing it?' },
+      { key: 'N', label: 'Mental chatter', desc: 'How noisy is your mind with thoughts, worries, or distractions?' },
+      { key: 'O', label: 'Mental load', desc: 'How overloaded do you feel by what you are juggling right now?' },
+      { key: 'C', label: 'Plan switching', desc: 'Are you sticking to one plan, or keep changing direction and second-guessing?' },
+      { key: 'R', label: 'Stuckness', desc: 'Do you feel flexible, or stuck in one way of doing things even if it is not working?' }
+    ];
+
+    const CAPACITY_TRAINING_COACH_URL = "../game-switcher/";
+
+    function computeDistance(ratings, prototype, weights) {
+      let sum = 0;
+      for (const k in prototype) {
+        const diff = ratings[k] - prototype[k];
+        sum += weights[k] * diff * diff;
+      }
+      return Math.sqrt(sum);
+    }
+
+    function classifyMode(ratings, externalDistractions) {
+      const N_eff = externalDistractions ? Math.min(10, ratings.N + 2) : ratings.N;
+      const adjustedRatings = { ...ratings, N: N_eff };
+
+      const distances = {};
+      for (const mode in PROTOTYPES) {
+        distances[mode] = computeDistance(adjustedRatings, PROTOTYPES[mode], WEIGHTS);
+      }
+
+      const scores = {};
+      for (const mode in distances) {
+        scores[mode] = Math.exp(-(distances[mode] ** 2) / TAU);
+      }
+
+      const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+      const probs = {};
+      for (const mode in scores) {
+        probs[mode] = scores[mode] / totalScore;
+      }
+
+      const primaryMode = Object.keys(probs).reduce((a, b) => probs[a] > probs[b] ? a : b);
+      const topProb = probs[primaryMode];
+      const confidence = topProb >= 0.60 ? 'High' : topProb >= 0.45 ? 'Medium' : 'Low';
+
+      return { primaryMode, modeProbs: probs, confidence, N_eff };
+    }
+
+    function selectBreathingPattern(primaryMode) {
+      if (primaryMode === 'SUB') return 'upshift';
+      if (primaryMode === 'PSI') return 'amplify';
+      return 'downshift';
+    }
+
+    function BreathingCoach({ patternId, onComplete }) {
+      const pattern = BREATH_PATTERNS[patternId];
+      const size = 260;
+      const centre = size / 2;
+      const minR = 54;
+      const maxR = 96;
+      const stroke = 10;
+      const targetMs = 180000;
+
+      const [running, setRunning] = useState(false);
+      const [elapsedMs, setElapsedMs] = useState(0);
+      const [phaseLabel, setPhaseLabel] = useState('Ready');
+      const [phaseKind, setPhaseKind] = useState('inhale');
+      const [phaseProgress, setPhaseProgress] = useState(0);
+      const [pingEnabled, setPingEnabled] = useState(true);
+
+      const rafRef = useRef(null);
+      const startRef = useRef(null);
+      const pingerRef = useRef(null);
+      const lastPhaseIndexRef = useRef(-1);
+
+      const cycleMs = useMemo(() => pattern.phases.reduce((s, p) => s + p.durationMs, 0), [pattern]);
+
+      const getPhaseAt = useCallback((tMs) => {
+        const t = (tMs % cycleMs + cycleMs) % cycleMs;
+        let acc = 0;
+        for (let i = 0; i < pattern.phases.length; i++) {
+          const p = pattern.phases[i];
+          const nextAcc = acc + p.durationMs;
+          if (t >= acc && t < nextAcc) {
+            return { index: i, label: p.label, kind: p.kind, progress: p.durationMs > 0 ? (t - acc) / p.durationMs : 0 };
+          }
+          acc = nextAcc;
+        }
+        const last = pattern.phases[pattern.phases.length - 1];
+        return { index: pattern.phases.length - 1, label: last.label, kind: last.kind, progress: 1 };
+      }, [cycleMs, pattern.phases]);
+
+      const start = async () => {
+        if (!pingerRef.current) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          const ctx = AudioCtx ? new AudioCtx() : null;
+          pingerRef.current = {
+            ctx,
+            ping: (freqHz = 440) => {
+              if (!ctx) return;
+              const t0 = ctx.currentTime;
+              const osc = ctx.createOscillator();
+              const g = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freqHz, t0);
+              g.gain.setValueAtTime(0.0001, t0);
+              g.gain.exponentialRampToValueAtTime(0.08, t0 + 0.01);
+              g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+              osc.connect(g);
+              g.connect(ctx.destination);
+              osc.start(t0);
+              osc.stop(t0 + 0.11);
+            }
+          };
+          if (ctx && ctx.state === 'suspended') await ctx.resume();
+        }
+        setRunning(true);
+        setElapsedMs(0);
+        lastPhaseIndexRef.current = -1;
+        startRef.current = performance.now();
+      };
+
+      useEffect(() => {
+        if (!running) return;
+        const tick = () => {
+          const now = performance.now();
+          const elapsed = now - startRef.current;
+          if (elapsed >= targetMs) {
+            setElapsedMs(targetMs);
+            setRunning(false);
+            onComplete?.();
+            return;
+          }
+          setElapsedMs(elapsed);
+          const ph = getPhaseAt(elapsed);
+          if (ph.index !== lastPhaseIndexRef.current) {
+            if (pingEnabled && pingerRef.current) {
+              pingerRef.current.ping(ph.kind === 'inhale' ? 440 : 660);
+            }
+            lastPhaseIndexRef.current = ph.index;
+          }
+          setPhaseLabel(ph.label);
+          setPhaseProgress(ph.progress);
+          setPhaseKind(ph.kind);
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(rafRef.current);
+      }, [running, pingEnabled, cycleMs, targetMs, getPhaseAt, onComplete]);
+
+      const displayRadius = minR + (maxR - minR) * (phaseKind === 'inhale' ? phaseProgress : 1 - phaseProgress);
+      const overallProgress = Math.min(1, elapsedMs / targetMs);
+      const remainingMs = Math.max(0, targetMs - elapsedMs);
+      const mm = Math.floor(remainingMs / 60000);
+      const ss = Math.floor((remainingMs % 60000) / 1000);
+
+      return (
+        <div className="min-h-screen bg-gray-200 p-6 flex justify-center items-start font-sans">
+          <div className="w-full max-w-4xl bg-white rounded-xl p-6 shadow-lg">
+            <header className="flex justify-between gap-4 items-start mb-4">
+              <div>
+                <div className="text-xs font-bold text-gray-600">Mindful Breathing Reset</div>
+                <h1 className="text-3xl font-black text-gray-900 mt-1">{pattern.name}</h1>
+                <div className="text-sm text-gray-700 mt-2">{pattern.description}</div>
+              </div>
+              <div className="text-right p-3 rounded-lg bg-gray-100 min-w-[150px]">
+                <div className="text-xs font-bold text-gray-600">Time remaining</div>
+                <div className="text-2xl font-black text-blue-700">{mm}:{String(ss).padStart(2, '0')}</div>
+              </div>
+            </header>
+
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 mb-4">
+              <div className="text-xs font-black text-gray-700">Attention cue</div>
+              <div className="text-sm text-gray-800 mt-2 leading-snug">{pattern.attentionCue}</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 flex flex-col items-center">
+                <div className="text-sm font-bold text-gray-800 mb-3 text-center">
+                  Thoughts wander → notice → return
+                </div>
+                <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                  <circle cx={centre} cy={centre} r={maxR} fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth={stroke} />
+                  <circle cx={centre} cy={centre} r={maxR + 18} fill="none" stroke="rgba(0,0,0,0.10)" strokeWidth={6} />
+                  <circle
+                    cx={centre}
+                    cy={centre}
+                    r={maxR + 18}
+                    fill="none"
+                    stroke="rgba(39,100,183,0.55)"
+                    strokeWidth={6}
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * (maxR + 18) * overallProgress} ${2 * Math.PI * (maxR + 18)}`}
+                    transform={`rotate(-90 ${centre} ${centre})`}
+                  />
+                  <circle cx={centre} cy={centre} r={displayRadius} fill="none" stroke="rgba(39,100,183,0.95)" strokeWidth={stroke} />
+                  <text x={centre} y={centre} textAnchor="middle" fontSize="20" fontWeight="700" fill="rgba(0,0,0,0.85)">{phaseLabel}</text>
+                </svg>
+                <div className="mt-3 text-xs text-gray-600 text-center max-w-md leading-tight">
+                  The outer ring is the target edge. Let your breath reach it at the top of the cycle.
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                {!running ? (
+                  <button onClick={start} className="w-full p-3 rounded-lg border-none bg-blue-700 text-white text-base font-black cursor-pointer hover:bg-blue-800">
+                    Start 3-minute reset
+                  </button>
+                ) : (
+                  <button onClick={() => setRunning(false)} className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-gray-900 text-base font-black cursor-pointer hover:bg-gray-50">
+                    Stop
+                  </button>
+                )}
+                <label className="flex items-center gap-3 mt-4 text-sm font-bold text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={pingEnabled} onChange={(e) => setPingEnabled(e.target.checked)} />
+                  <span>Ping at high/low points</span>
+                </label>
+                <div className="mt-4 p-3 rounded-xl bg-yellow-50 border border-yellow-300">
+                  <div className="text-xs font-black text-gray-800">Safety</div>
+                  <div className="text-xs text-gray-800 mt-2 leading-tight">{pattern.safety}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ZoneCoach() {
+      const [showSplash, setShowSplash] = useState(true);
+      const [step, setStep] = useState('ratings');
+      const [ratings, setRatings] = useState({ E: 5, S: 5, F: 5, N: 5, O: 5, C: 5, R: 5 });
+      const [externalDistractions, setExternalDistractions] = useState(false);
+      const [classification, setClassification] = useState(null);
+      const [breathPattern, setBreathPattern] = useState(null);
+      const [postBreathReport, setPostBreathReport] = useState(null);
+
+      const brand = {
+        appName: 'Zone Coach',
+        subtitle: 'Quick state check → mindful reset → start training',
+        accent: '#2764B7',
+        logoSrc: './assets/trident-logo.svg'
+      };
+
+      if (showSplash) {
+        return (
+          <div className="min-h-screen bg-gray-200 flex items-center justify-center p-6 font-sans">
+            <div className="w-full max-w-md bg-white rounded-xl p-7 shadow-lg text-center">
+              <img 
+                src={brand.logoSrc} 
+                alt="Trident logo" 
+                className="w-24 h-24 mx-auto mb-4 object-contain"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div className="text-3xl font-black mb-2" style={{ color: '#333333' }}>{brand.appName}</div>
+              <div className="text-sm font-semibold mb-5 leading-snug" style={{ color: '#6D6D6D' }}>{brand.subtitle}</div>
+              <button onClick={() => setShowSplash(false)} className="w-full p-3 rounded-xl border-none text-white text-base font-black cursor-pointer hover:brightness-90" style={{ background: brand.accent }}>
+                Continue
+              </button>
+              <div className="mt-4 text-xs" style={{ color: '#6D6D6D' }}>Mindware Lab • Trident</div>
+            </div>
+          </div>
+        );
+      }
+
+      const handleRatingsSubmit = () => {
+        const result = classifyMode(ratings, externalDistractions);
+        const pattern = selectBreathingPattern(result.primaryMode);
+        
+        setClassification(result);
+        setBreathPattern(pattern);
+        setStep('results');
+      };
+
+      const handleStartBreathing = () => {
+        setStep('breathing');
+      };
+
+      const handleBreathingComplete = () => {
+        setStep('postBreath');
+      };
+
+      const handlePostBreathSubmit = (report) => {
+        setPostBreathReport(report);
+        
+        const preInZone = classification.primaryMode === 'PSI';
+        const postInZone = report === 'Ψ-band';
+        const blockTraining = !preInZone && !postInZone;
+        
+        const telemetry = {
+          version: 'zonecheck-v2',
+          timestamp: new Date().toISOString(),
+          ratings,
+          externalDistractions,
+          derived: {
+            N_eff: classification.N_eff,
+            pressure: (ratings.S + ratings.O) / 2,
+            interference: (ratings.N + ratings.C) / 2,
+            load: (ratings.O + ratings.C + ratings.R) / 3,
+            stability: (ratings.F + (10 - ratings.R)) / 2
+          },
+          prototypes: {
+            primaryMode: classification.primaryMode,
+            modeLabelPublic: MODE_LABELS[classification.primaryMode],
+            modeProbs: classification.modeProbs,
+            confidence: classification.confidence
+          },
+          breathing: {
+            patternId: breathPattern,
+            patternName: BREATH_PATTERNS[breathPattern].name,
+            completed: true,
+            postBreathSelfReport: report
+          },
+          gate: {
+            preInZone,
+            postInZone,
+            blockTraining,
+            recommendation: blockTraining ? 'recover' : 'proceed'
+          }
+        };
+
+        try {
+          const history = JSON.parse(window.localStorage.getItem('zoneCheckHistory') || '[]');
+          history.push(telemetry);
+          if (history.length > 30) history.shift();
+          window.localStorage.setItem('zoneCheckHistory', JSON.stringify(history));
+          window.localStorage.setItem('zoneCheckTelemetry', JSON.stringify(telemetry));
+        } catch (e) {
+          console.error('Storage error:', e);
+        }
+
+        setStep('complete');
+      };
+
+      if (step === 'breathing') {
+        return <BreathingCoach patternId={breathPattern} onComplete={handleBreathingComplete} />;
+      }
+
+      return (
+        <div className="min-h-screen bg-gray-200 p-6 flex justify-center items-start font-sans">
+          <div className="w-full max-w-2xl bg-white rounded-xl p-6 shadow-lg">
+            {step === 'ratings' && (
+              <>
+                <h1 className="text-3xl font-black text-gray-900 mb-2">Zone Check</h1>
+                <p className="mb-6 text-sm text-gray-700">Rate how you feel right now (0 = not at all, 10 = extremely)</p>
+                
+                {SLIDERS.map(s => (
+                  <div key={s.key} className="mb-6">
+                    <label className="flex justify-between text-base font-bold text-gray-900 mb-1">
+                      {s.label}
+                      <span className="text-lg font-black text-blue-700">{ratings[s.key]}</span>
+                    </label>
+                    <div className="text-xs text-gray-600 mb-2 leading-snug">{s.desc}</div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      value={ratings[s.key]}
+                      onChange={(e) => setRatings({ ...ratings, [s.key]: parseInt(e.target.value) })}
+                      className="w-full h-2 rounded"
+                    />
+                  </div>
+                ))}
+
+                <label className="flex items-center gap-3 mb-6 text-sm font-semibold text-gray-800 cursor-pointer">
+                  <input type="checkbox" checked={externalDistractions} onChange={(e) => setExternalDistractions(e.target.checked)} />
+                  <span>Notifications, noise, people, or interruptions are affecting me right now</span>
+                </label>
+
+                <button onClick={handleRatingsSubmit} className="w-full p-3 rounded-lg border-none bg-blue-700 text-white text-base font-black cursor-pointer mt-2 hover:bg-blue-800">
+                  Analyze my state
+                </button>
+              </>
+            )}
+
+            {step === 'results' && (
+              <>
+                <h1 className="text-3xl font-black text-gray-900 mb-2">Your Current State</h1>
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 mb-4">
+                  <div className="text-2xl font-black text-gray-900 mb-1">{MODE_LABELS[classification.primaryMode]}</div>
+                  <div className="text-sm font-bold text-gray-600">Confidence: {classification.confidence}</div>
+                </div>
+
+                <div className="mb-4">
+                  <h2 className="text-xl font-black text-gray-900 mb-3">Recommended Reset</h2>
+                  <div className="text-lg font-black text-blue-700 mb-1">{BREATH_PATTERNS[breathPattern].name}</div>
+                  <div className="text-sm text-gray-700 mb-2">{BREATH_PATTERNS[breathPattern].description}</div>
+                  <p className="text-sm text-gray-600 mt-3">Do the 3-minute reset, then we'll decide whether to proceed to training.</p>
+                </div>
+
+                <button onClick={handleStartBreathing} className="w-full p-3 rounded-lg border-none bg-blue-700 text-white text-base font-black cursor-pointer mt-2 hover:bg-blue-800">
+                  Start 3-minute reset
+                </button>
+              </>
+            )}
+
+            {step === 'postBreath' && (
+              <>
+                <h1 className="text-3xl font-black text-gray-900 mb-2">How do you feel now?</h1>
+                <p className="mb-6 text-sm text-gray-700">Quick check after your breathing reset</p>
+                
+                <div className="flex flex-col gap-3">
+                  {[
+                    { label: 'Flat / low drive', value: 'Subcritical' },
+                    { label: 'In the zone', value: 'Ψ-band' },
+                    { label: 'Overloaded & scattered', value: 'Supercritical – explore' },
+                    { label: 'Over-tight & stuck', value: 'Supercritical – rigid control' },
+                    { label: 'Not sure', value: 'Not sure' }
+                  ].map(opt => (
+                    <button key={opt.value} onClick={() => handlePostBreathSubmit(opt.value)} className="p-3 rounded-lg border-2 border-gray-200 bg-white text-base font-bold cursor-pointer text-left hover:bg-gray-50">
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {step === 'complete' && classification && (
+              <>
+                <h1 className="text-3xl font-black text-gray-900 mb-2">Reset Complete ✓</h1>
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 mb-4">
+                  <div className="text-2xl font-black text-gray-900">Post-breath: {postBreathReport}</div>
+                </div>
+
+                {(() => {
+                  const preInZone = classification.primaryMode === 'PSI';
+                  const postInZone = postBreathReport === 'Ψ-band';
+                  const blockTraining = !preInZone && !postInZone;
+
+                  return (
+                    <div className="p-4 rounded-xl bg-gray-100 mb-4">
+                      <h2 className="text-xl font-black text-gray-900 mb-3">Next step</h2>
+
+                      {blockTraining ? (
+                        <div className="text-base text-gray-800">
+                          <p className="font-bold mb-2">Recovery recommended today.</p>
+                          <p>
+                            You were out of zone before and after the reset. Keep it light: walk, mobility,
+                            hydration, early night, and try again tomorrow.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="text-base text-gray-800">
+                          <p className="font-bold mb-3">Go onto your training.</p>
+                          <button
+                            onClick={() => window.open(CAPACITY_TRAINING_COACH_URL, "_blank")}
+                            className="w-full p-3 rounded-lg border-none bg-blue-700 text-white text-base font-black cursor-pointer hover:bg-blue-800"
+                          >
+                            Go to Capacity Training Coach
+                          </button>
+                          <p className="text-xs text-gray-600 mt-2">
+                            Your zone telemetry has been saved for the coach/switcher.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <button onClick={() => { setStep('ratings'); setPostBreathReport(null); }} className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-gray-900 text-base font-black cursor-pointer mt-2 hover:bg-gray-50">
+                  Start new check
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<ZoneCoach />, document.getElementById('root'));
+  </script>
+</body>
+</html>
