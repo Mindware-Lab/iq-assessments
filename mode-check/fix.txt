@@ -1,0 +1,99 @@
+Yep — when you get a *blank grey page* with this pattern, it almost always means **React never mounted** because a JS error happened very early (or React/Babel didn’t load). Your `<body>` background is grey, so you’re just seeing the page shell.
+
+Here are the **most likely causes** in your specific setup, plus the quickest fixes.
+
+## 1) React 18 “createRoot” isn’t available in your UMD bundle (common)
+
+Depending on the exact UMD build served by unpkg, **`ReactDOM.createRoot` may be missing** (React 18’s recommended entry point is `react-dom/client`). If your code hits a “createRoot is not a function” / “render is not a function” error, nothing mounts → blank.
+
+### Fix (most robust): add `react-dom-client` and mount via `ReactDOMClient`
+
+Replace your ReactDOM script tag and the mount code at the bottom like this:
+
+```html
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom-client.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+```
+
+And change the mount to:
+
+```jsx
+const container = document.getElementById('root');
+if (!container) throw new Error('Root container not found');
+
+if (window.ReactDOMClient?.createRoot) {
+  window.ReactDOMClient.createRoot(container).render(<CognitiveModeCheck />);
+} else if (window.ReactDOM?.createRoot) {
+  window.ReactDOM.createRoot(container).render(<CognitiveModeCheck />);
+} else if (window.ReactDOM?.render) {
+  window.ReactDOM.render(<CognitiveModeCheck />, container);
+} else {
+  throw new Error('No ReactDOM mount API found');
+}
+```
+
+## 2) Babel isn’t actually transpiling your JSX (so the script crashes on the first `<div …>`)
+
+If Babel fails to load (blocked, offline, CSP, extension), or it doesn’t run for some reason, the browser will see raw JSX and throw a syntax error like “Unexpected token ‘<’”.
+
+### Fix: make Babel’s intent explicit + give yourself a visible error
+
+Change your Babel script tag to:
+
+```html
+<script type="text/babel" data-presets="env,react">
+```
+
+And add this tiny error overlay *above* your big script (still inside `<body>`):
+
+```html
+<script>
+  window.addEventListener('error', (e) => {
+    const root = document.getElementById('root');
+    if (root) {
+      root.innerHTML =
+        '<pre style="padding:12px;white-space:pre-wrap;background:#fff;border:2px solid #f00;">' +
+        (e.error?.stack || e.message) +
+        '</pre>';
+    }
+  });
+</script>
+```
+
+That turns “blank grey mystery” into an on-screen stack trace instantly.
+
+## 3) One runtime error inside the component is crashing the first render
+
+Even a single `Cannot read properties of undefined` anywhere during render will prevent anything appearing.
+
+In your code, one high-probability render-time crash would be if **`sessionResults.patternId`** is ever undefined but you still access:
+
+* `breathPatterns[sessionResults.patternId].name`
+* `breathPatterns[sessionResults.patternId].description`
+
+You’ve guarded most of those with `sessionResults` checks, but if `sessionResults` exists and `patternId` is missing, it’ll still blow up.
+
+### Defensive fix (safe default)
+
+Inside `calculateResults()`, you already set `patternId` — keep that, but also make access safe in the render spots:
+
+```jsx
+const pattern = breathPatterns[sessionResults.patternId] || breathPatterns.amplify;
+```
+
+…and then use `pattern.name`, etc.
+
+---
+
+## What to do *right now* (fast diagnosis)
+
+1. Open DevTools → **Console**. Refresh. You’ll almost certainly see one of:
+
+   * `ReactDOM.createRoot is not a function`
+   * `Unexpected token '<'` (JSX not transpiled)
+   * a normal runtime error pointing to a specific line
+2. If you want the fastest “make it work regardless”, apply **Fix #1 + Fix #2** (ReactDOMClient + `data-presets` + error overlay). That combination eliminates ~90% of blank-screen causes in these single-file React/Babel pages.
+
+If you paste the exact console error text here, I’ll point to the precise line and give you the minimal patch (often it’s literally a 2–5 line change).
