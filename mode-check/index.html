@@ -14,10 +14,15 @@
       padding: 0;
     }
     
+    html, body, #root {
+      min-height: 100%;
+    }
+    
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      background: #E0E0E0;
     }
 
     /* Custom slider styling */
@@ -152,20 +157,20 @@
           instructions: "Breathe through your nose if comfortable. Keep it light and comfortable (not deep gulps). If you feel light-headed, slow down or stop and return to normal breathing.",
           phases: [
             // Block A: 40s total (10 × 4s)
-            ...Array(10).fill(null).flatMap(() => [
+            ...Array.from({ length: 10 }, () => [
               { label: 'Inhale', duration: 2000 },
               { label: 'Exhale', duration: 2000 }
-            ]),
+            ]).flat(),
             // Block B: 70s total (14 × 5s)
-            ...Array(14).fill(null).flatMap(() => [
+            ...Array.from({ length: 14 }, () => [
               { label: 'Inhale', duration: 3000 },
               { label: 'Exhale', duration: 2000 }
-            ]),
+            ]).flat(),
             // Block C: 70s total (10 × 7s)
-            ...Array(10).fill(null).flatMap(() => [
+            ...Array.from({ length: 10 }, () => [
               { label: 'Inhale', duration: 4000 },
               { label: 'Exhale', duration: 3000 }
-            ])
+            ]).flat()
           ]
         },
         amplify: {
@@ -173,21 +178,21 @@
           description: "Resonance breathing to maintain optimal state",
           rationale: "Balanced and engaged → stabilise and amplify",
           instructions: "Breathe comfortably through your nose, keeping breaths belly-led and smooth.",
-          phases: Array(18).fill(null).flatMap(() => [
+          phases: Array.from({ length: 18 }, () => [
             { label: 'Inhale', duration: 4000 },
             { label: 'Exhale', duration: 6000 }
-          ])
+          ]).flat()
         },
         downshift: {
           name: "Downshift",
           description: "Cyclic sighing to reduce tension",
           rationale: "High load/noise → downshift",
           instructions: "Two short inhales through your nose (second tops up the first), then a long sigh out through your mouth.",
-          phases: Array(20).fill(null).flatMap(() => [
+          phases: Array.from({ length: 20 }, () => [
             { label: 'Inhale (1)', duration: 1000 },
             { label: 'Inhale (2)', duration: 1000 },
             { label: 'Sigh Out', duration: 7000 }
-          ])
+          ]).flat()
         }
       };
 
@@ -529,6 +534,8 @@
         }
         
         setStep('breath');
+        setBreathElapsed(0);
+        setCurrentPhase({ label: 'Inhale', progress: 0, isInhale: true });
         startTimeRef.current = performance.now();
         lastBeepPhaseRef.current = -1;
         
@@ -846,6 +853,42 @@
         const finalConfidence = postBreathMode ? 'Medium' : sessionResults.confidence;
         const doseRec = getDoseRecommendation(finalMode, finalLoad, finalEnergy, finalConfidence);
         
+        // --- Display values (post-breath if available, otherwise pre-breath) ---
+        const finalStability = inferredSliders.focus - finalInterference;
+        
+        const displaySliderValues = postBreathMode
+          ? {
+              E: inferredSliders.energy,
+              S: inferredSliders.stress,
+              F: inferredSliders.focus,
+              N: inferredSliders.noise,
+              O: inferredSliders.overwhelm,
+              C: inferredSliders.churn,
+              R: inferredSliders.rigidity
+            }
+          : sessionResults.sliderValues;
+        
+        const displayPressure = postBreathMode ? finalPressure : sessionResults.pressure;
+        const displayInterference = postBreathMode ? finalInterference : sessionResults.interference;
+        const displayStability = postBreathMode ? finalStability : sessionResults.stability;
+        const displayLoad = postBreathMode ? finalLoad : sessionResults.load;
+        
+        const displayConfidence = postBreathMode ? 'User recheck' : sessionResults.confidence;
+        
+        // Optional: variance driver recalculated for post-breath mode when relevant
+        const displayVarianceDriver = (() => {
+          if (!postBreathMode) return sessionResults.varianceDriver;
+          
+          if (!finalMode.includes('scattered explore')) return 'N/A';
+          
+          const C = inferredSliders.churn;
+          const I = finalInterference;
+          
+          if (C >= 7 && I <= 6) return 'Strategy churn (over-exploration)';
+          if (I >= 7 || externalDistractions) return 'Distraction / noise (interference)';
+          return 'Mixed (churn + noise)';
+        })();
+        
         // Compute final colors based on post-breath mode
         let finalBgColor = '#F5F5F5';
         let finalBorderColor = '#6D6D6D';
@@ -971,7 +1014,7 @@
                         </>
                       )}
                       <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: '#333333' }}>
-                        Confidence: <strong>{sessionResults.confidence}</strong>
+                        Confidence: <strong>{displayConfidence}</strong>
                       </p>
                     </div>
                   </div>
@@ -982,7 +1025,7 @@
                       {['E', 'S', 'F', 'N', 'O', 'C', 'R'].map(key => (
                         <div key={key} style={{ padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}>
                           <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>{key}</div>
-                          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{sessionResults.sliderValues[key]}</div>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{displaySliderValues[key]}</div>
                         </div>
                       ))}
                     </div>
@@ -990,28 +1033,28 @@
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem', marginTop: '0.75rem' }}>
                       <div style={{ padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>Pressure (S+O)/2</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{sessionResults.pressure.toFixed(2)}</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{displayPressure.toFixed(2)}</div>
                       </div>
                       <div style={{ padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>Interference (N+dist)</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{sessionResults.interference.toFixed(2)}</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{displayInterference.toFixed(2)}</div>
                       </div>
                       <div style={{ padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>Stability (F−I)</div>
                         <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>
-                          {sessionResults.stability > 0 ? `+${sessionResults.stability.toFixed(2)}` : sessionResults.stability.toFixed(2)}
+                          {displayStability > 0 ? `+${displayStability.toFixed(2)}` : displayStability.toFixed(2)}
                         </div>
                       </div>
                       <div style={{ padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>Load (P+I)/2</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{sessionResults.load.toFixed(2)}</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#333333' }}>{displayLoad.toFixed(2)}</div>
                       </div>
                     </div>
 
-                    {sessionResults.varianceDriver !== 'N/A' && (
+                    {displayVarianceDriver !== 'N/A' && (
                       <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '0.25rem', backgroundColor: 'rgba(178, 124, 255, 0.1)', border: '1px solid #B07CFF' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6D6D6D' }}>Variance Driver</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#333333' }}>{sessionResults.varianceDriver}</div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#333333' }}>{displayVarianceDriver}</div>
                       </div>
                     )}
                   </div>
@@ -1381,11 +1424,10 @@
     };
 
     const container = document.getElementById('root');
-
+    
     // Robust mount: React 18+ if available, otherwise legacy render
     if (ReactDOM.createRoot) {
-      const root = ReactDOM.createRoot(container);
-      root.render(<CognitiveModeCheck />);
+      ReactDOM.createRoot(container).render(<CognitiveModeCheck />);
     } else {
       ReactDOM.render(<CognitiveModeCheck />, container);
     }
