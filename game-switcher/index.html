@@ -1813,39 +1813,6 @@ if (screen === 'afterTraining') {
     </div>
   );
 }
-const unitUrl = buildOperatorUrl(unit, unitCtx);
-window.location.href = unitUrl;
-                  }}
-                  className="p-4 rounded-lg border-2 font-semibold transition-all"
-                  style={{
-                    borderColor: isCompleted ? '#CCFF66' : '#E0E0E0',
-                    backgroundColor: isCompleted ? '#F5FFE6' : '#FFFFFF',
-                    color: '#333333'
-                  }}
-                >
-                  Unit {unit}
-                  {isCompleted && (
-                    <div className="text-xs mt-1" style={{ color: '#6D6D6D' }}>
-                      ✓ Complete
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-                <button
-                  onClick={() => setScreen('afterTraining')}
-                  className="w-full py-3 px-6 rounded-lg font-semibold border-2 transition-all"
-                  style={{ borderColor: '#2764B7', color: '#2764B7', backgroundColor: '#FFFFFF' }}>
-                  Back
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
       return null;
     };
 
