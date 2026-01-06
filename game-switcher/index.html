@@ -152,14 +152,62 @@ const localYYYYMMDD = (d = new Date()) => {
 const normaliseZoneTelemetry = (raw) => {
   if (!raw || typeof raw !== 'object') return null;
 
+  // Helper: always ensure localDate exists
+  const ensuredLocalDate =
+    raw.localDate ||
+    (raw.timestamp ? localYYYYMMDD(new Date(raw.timestamp)) : localYYYYMMDD());
+
   // Already in switcher schema (has dose + postBreathMode)
   if (raw.dose && raw.postBreathMode) {
-    return {
-      ...raw,
-      localDate:
-        raw.localDate ||
-        (raw.timestamp ? localYYYYMMDD(new Date(raw.timestamp)) : localYYYYMMDD())
+    return { ...raw, localDate: ensuredLocalDate };
+  }
+
+  // Detect Zone Coach schema by SHAPE (not version string)
+  const looksLikeZoneCoach =
+    !!raw?.breathing?.postBreathSelfReport ||
+    raw?.gate?.blockTraining !== undefined ||
+    raw?.gate?.postInZone !== undefined ||
+    raw?.gate?.preInZone !== undefined;
+
+  if (looksLikeZoneCoach) {
+    const report = raw?.breathing?.postBreathSelfReport;
+
+    const reportMap = {
+      'Subcritical': 'Subcritical (flat/demotivated)',
+      'Ψ-band': 'Ψ-band (in the zone)',
+      'Supercritical – explore': 'Supercritical: scattered explore',
+      'Supercritical – rigid control': 'Supercritical: rigid control',
+      'Not sure': 'Mixed / unclear'
     };
+
+    const postBreathMode =
+      reportMap[report] ||
+      (raw?.prototypes?.modeLabelPublic ? String(raw.prototypes.modeLabelPublic) : 'Mixed / unclear');
+
+    const postInZone = !!raw?.gate?.postInZone;
+    const blockTraining = !!raw?.gate?.blockTraining;
+
+    const dose = {
+      level: blockTraining ? 'red' : (postInZone ? 'green' : 'amber'),
+      sessions: blockTraining ? 0 : 1,
+      blocks: blockTraining ? 0 : 1,
+      recommendation: blockTraining
+        ? 'Recovery recommended today. Keep it light and try again tomorrow.'
+        : 'Proceed with training.'
+    };
+
+    return {
+      localDate: ensuredLocalDate,
+      postBreathMode,
+      dose,
+      timestamp: raw.timestamp,
+      rawZoneCheck: raw
+    };
+  }
+
+  // Unknown shape: still attach localDate so your "today" check doesn't nuke it
+  return { ...raw, localDate: ensuredLocalDate };
+};
   }
 
   // Zone Coach schema (your Zone Coach app)
