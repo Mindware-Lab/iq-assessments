@@ -658,6 +658,16 @@ const modeToStateMap = {
           if (ctx.zone) url.searchParams.set('zone', ctx.zone);
           if (ctx.strategy) url.searchParams.set('strategy', ctx.strategy);
 
+          // Capacity focus handoff (so the Unit app can highlight the right skill)
+if (ctx.capId) url.searchParams.set('cap', ctx.capId);
+if (ctx.capLabel) url.searchParams.set('capLabel', ctx.capLabel);
+if (ctx.capDef) url.searchParams.set('capDef', ctx.capDef);
+if (ctx.capMatch) url.searchParams.set('capMatch', ctx.capMatch);
+
+// Unit declared targets (Option B)
+if (ctx.unitPrimaryCap) url.searchParams.set('unitPrimaryCap', ctx.unitPrimaryCap);
+if (ctx.unitSecondaryCap) url.searchParams.set('unitSecondaryCap', ctx.unitSecondaryCap);
+
           // Pass spike-capture bridge data (no double encoding)
           url.searchParams.set('obs', ctx.obs || '');
           url.searchParams.set('move', ctx.move || '');
@@ -1301,11 +1311,23 @@ const unitTargets = getUnitTargets(targetUnit);
       }
 
       // SCREEN: After Training
-      if (screen === 'afterTraining') {
-        const settings = recommendation?.settings || { speed: false, interference: false, handSwitch: false };
-        const trainingFocus = getTrainingFocus(settings);
-        const unitsToComplete = zoneCheckData?.dose?.sessions || 1;
-        const currentUnitToComplete = userProgress.currentUnit;
+if (screen === 'afterTraining') {
+  const settings = recommendation?.settings || { speed: false, interference: false, handSwitch: false };
+  const unitsToComplete = zoneCheckData?.dose?.sessions || 1;
+  const currentUnitToComplete = userProgress.currentUnit;
+
+  const unitTargets = getUnitTargets(currentUnitToComplete);
+
+  const capacityPack = pickCapacityPack({
+    unitNumber: currentUnitToComplete,
+    gameId: recommendation?.game || 'anchor_noncat',
+    settings
+  });
+
+  const trainingFocus = capacityPack.label;
+
+  const isAnchorSession = recommendation?.game === 'anchor_noncat';
+  const unitInfo = UNIT_METADATA[currentUnitToComplete] || { title: "Mindware Practice", category: "Mindware", time: "≤10 min" };
         const isAnchorSession = recommendation?.game === 'anchor_noncat';
         const unitInfo = UNIT_METADATA[currentUnitToComplete] || { title: "Mindware Practice", category: "Mindware", time: "≤10 min" };
 
@@ -1403,19 +1425,48 @@ const unitTargets = getUnitTargets(targetUnit);
                       sessionStorage.setItem('currentSessionType', recommendation.game);
                       sessionStorage.setItem('currentSessionTimestamp', Date.now().toString());
 
+// Persist a handoff record for the Unit app (same-origin read)
+persistCapacityHandoff({
+  localDate: localYYYYMMDD(),
+  timestamp: Date.now(),
+  unitNumber: currentUnitToComplete,
+  unitTitle: unitInfo.title,
+  planType: recommendation.planType,
+  gameId: recommendation.game,
+  settings,
+  zone: postBreathState,
+  swapStrategy: swapStrategy || '',
+  capacity: {
+    id: capacityPack.id,
+    label: capacityPack.label,
+    def: capacityPack.def,
+    match: capacityPack.match,
+    unitPrimary: unitTargets.primary,
+    unitSecondary: unitTargets.secondary
+  }
+});
+                      
                       // Build context to pass to unit
-                      const unitContext = {
-                        focus: trainingFocus,
-                        plan: recommendation.planType,
-                        game: recommendation.game,
-                        settings: settings,
-                        zone: postBreathState,
-                        strategy: swapStrategy || '',
-                        obs: bridgeObs,
-                        move: bridgeMove,
-                        sessionsCompleted: sessionsCompletedToday,
-                        totalSessions: unitsToComplete
-                      };
+const unitContext = {
+  focus: trainingFocus,
+  plan: recommendation.planType,
+  game: recommendation.game,
+  settings: settings,
+  zone: postBreathState,
+  strategy: swapStrategy || '',
+  obs: bridgeObs,
+  move: bridgeMove,
+  sessionsCompleted: sessionsCompletedToday,
+  totalSessions: zoneCheckData?.dose?.sessions || 1,
+
+  // New: capacity focus handoff
+  capId: cap.id,
+  capLabel: cap.label,
+  capDef: cap.def,
+  capMatch: cap.match,
+  unitPrimaryCap: targets.primary,
+  unitSecondaryCap: targets.secondary
+};
 
                       // FIX: Persist the last plan state so we can restore it after unit completion
                       try {
@@ -1591,37 +1642,32 @@ const unitTargets = getUnitTargets(targetUnit);
                       <button
                         key={unit}
                         onClick={() => {
-                          const unitContext = {
-                            focus: trainingFocus,
-                            plan: recommendation.planType,
-                            game: recommendation.game,
-                            settings: settings,
-                            zone: postBreathState,
-                            strategy: swapStrategy || '',
-                            obs: bridgeObs,
-                            move: bridgeMove,
-                            sessionsCompleted: sessionsCompletedToday,
-                            totalSessions: zoneCheckData?.dose?.sessions || 1
-                          };
+const targets = getUnitTargets(unit);
+const cap = pickCapacityPack({
+  unitNumber: unit,
+  gameId: recommendation?.game || 'anchor_noncat',
+  settings
+});
 
-                          // Persist last plan state as well (helps restore after completion)
-                          try {
-                            sessionStorage.setItem('lastPlanState', JSON.stringify({
-                              postBreathState,
-                              trained3,
-                              progress,
-                              routine,
-                              robustness,
-                              click,
-                              deploy,
-                              spikeGap,
-                              breaksFirst,
-                              selectedChange,
-                              swapChoice,
-                              swapStrategy,
-                              recommendation: { ...recommendation, settings }
-                            }));
-                          } catch {}
+persistCapacityHandoff({
+  localDate: localYYYYMMDD(),
+  timestamp: Date.now(),
+  unitNumber: unit,
+  unitTitle: UNIT_METADATA[unit]?.title || '',
+  planType: recommendation.planType,
+  gameId: recommendation.game,
+  settings,
+  zone: postBreathState,
+  swapStrategy: swapStrategy || '',
+  capacity: {
+    id: cap.id,
+    label: cap.label,
+    def: cap.def,
+    match: cap.match,
+    unitPrimary: targets.primary,
+    unitSecondary: targets.secondary
+  }
+});
 
                           const unitUrl = buildOperatorUrl(unit, unitContext);
                           window.location.href = unitUrl;
