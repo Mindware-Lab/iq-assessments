@@ -216,221 +216,171 @@ const getLatestZoneTelemetry = () => {
     return null;
   }
 };
-/**
- * Unit-side read contract (Capacity Coach -> Unit app)
- * Priority:
- *  1) URL query params (works cross-origin)
- *  2) localStorage.lastCapacitySession (best UX, same-origin only)
- *
- * Validates "today" to avoid stale state.
- * Returns a normalised object you can drop straight into UI.
- */
+// ------------------------------
+// Capacity Focus (portable skills) + Unit mapping (Option B)
+// ------------------------------
 
-// ---------- helpers ----------
-const localYYYYMMDD = (d = new Date()) => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
-
-const safeJSONParse = (s) => {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
+// Everyday, user-facing labels + one-liner definitions.
+// Grounded in the portable skill families doc. :contentReference[oaicite:2]{index=2}
+const CAPACITY_FOCI = {
+  wm_maintenance: {
+    id: 'wm_maintenance',
+    label: 'Hold the thread',
+    def: 'Keep a few key things in mind without losing track.'
+  },
+  interference_control: {
+    id: 'interference_control',
+    label: 'Ignore distractions',
+    def: 'Stay on target and reject “lures” that try to hijack your response.'
+  },
+  update_hold: {
+    id: 'update_hold',
+    label: 'Update without thrashing',
+    def: 'Overwrite when you should, hold steady when you should.'
+  },
+  criterion_control: {
+    id: 'criterion_control',
+    label: 'Be sure before you click',
+    def: 'Set a sensible confidence threshold and avoid guessing habits.'
+  },
+  dual_channel_allocation: {
+    id: 'dual_channel_allocation',
+    label: 'Split attention on purpose',
+    def: 'Balance two streams without letting one quietly drop out.'
+  },
+  sustained_state_control: {
+    id: 'sustained_state_control',
+    label: 'Stay steady under load',
+    def: 'Recover quickly after slips and keep performance stable.'
+  },
+  rapid_instructed_control: {
+    id: 'rapid_instructed_control',
+    label: 'Switch rules cleanly',
+    def: 'Implement rule/mapping changes quickly without collapsing.'
+  },
+  wrapper_invariant_encoding: {
+    id: 'wrapper_invariant_encoding',
+    label: 'Learn the pattern, not the wrapper',
+    def: 'Build a compact “rule-of-the-stream” that survives surface changes.'
+  },
+  speed_under_load: {
+    id: 'speed_under_load',
+    label: 'Stay accurate at speed',
+    def: 'Keep the rule even when the pace increases.'
   }
 };
 
-const getQS = () => new URLSearchParams(window.location.search);
-
-const bool01 = (v) => v === "1" || v === 1 || v === true;
-
-const pickFirstNonEmpty = (...vals) => {
-  for (const v of vals) {
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return null;
+// Primary “signature” of each game wrapper (used for best-fit picking).
+// Grounded in your DNB mapping. :contentReference[oaicite:3]{index=3}
+const GAME_SIGNATURES = {
+  anchor_noncat: [
+    'interference_control',
+    'update_hold',
+    'wrapper_invariant_encoding',
+    'criterion_control',
+    'dual_channel_allocation',
+    'sustained_state_control'
+  ],
+  classic: [
+    'dual_channel_allocation',
+    'update_hold',
+    'criterion_control',
+    'interference_control',
+    'wrapper_invariant_encoding'
+  ],
+  emotional: [
+    // Emotional wrapper especially stresses salience-resilient gating + state stability. :contentReference[oaicite:4]{index=4}
+    'interference_control',
+    'sustained_state_control',
+    'criterion_control',
+    'dual_channel_allocation',
+    'update_hold'
+  ],
+  logic_gated: [
+    // Logic-gated especially stresses instructed control + criterion control. :contentReference[oaicite:5]{index=5}
+    'rapid_instructed_control',
+    'criterion_control',
+    'update_hold',
+    'interference_control',
+    'wrapper_invariant_encoding'
+  ]
 };
 
-// ---------- main reader ----------
-export const readCapacityHandoff = (expectedUnitNumber = null) => {
-  const today = localYYYYMMDD();
-  const qs = getQS();
+// Option B: fixed primary + secondary per unit.
+// These are *defaults*; you can tune later without touching any logic.
+const UNIT_CAPACITY_MAP = {
+  1:  { primary: 'criterion_control',        secondary: 'update_hold',              useLine: 'Use it to shift the story, then do one quick reality-check.' },
+  2:  { primary: 'update_hold',              secondary: 'rapid_instructed_control', useLine: 'Use it to run a fast OODA loop without losing the thread.' },
+  3:  { primary: 'wrapper_invariant_encoding',secondary: 'wm_maintenance',          useLine: 'Use it to compress the job into a simple checklist you can execute.' },
+  4:  { primary: 'update_hold',              secondary: 'criterion_control',        useLine: 'Use it to update your belief when evidence changes, not when mood changes.' },
+  5:  { primary: 'wrapper_invariant_encoding',secondary: 'wm_maintenance',          useLine: 'Use it to spot the underlying pattern and ignore surface noise.' },
+  6:  { primary: 'criterion_control',        secondary: 'interference_control',     useLine: 'Use it to test assumptions without being pulled by tempting stories.' },
+  7:  { primary: 'interference_control',     secondary: 'criterion_control',        useLine: 'Use it to seriously consider the opposite (without snap-reverting).' },
+  8:  { primary: 'criterion_control',        secondary: 'wm_maintenance',           useLine: 'Use it to apply base rates cleanly instead of going with gut feel.' },
+  9:  { primary: 'rapid_instructed_control', secondary: 'interference_control',     useLine: 'Use it to run a premortem without spiralling into unhelpful detail.' },
+  10: { primary: 'interference_control',     secondary: 'wm_maintenance',           useLine: 'Use it to steelman the strongest case rather than the loudest case.' },
+  11: { primary: 'wm_maintenance',           secondary: 'criterion_control',        useLine: 'Use it to hold the real crux steady and avoid arguing around it.' },
+  12: { primary: 'criterion_control',        secondary: 'interference_control',     useLine: 'Use it to actively look for disconfirming evidence.' },
+  13: { primary: 'interference_control',     secondary: 'criterion_control',        useLine: 'Use it to separate signal from noise and stay relevance-led.' },
+  14: { primary: 'wm_maintenance',           secondary: 'wrapper_invariant_encoding',useLine:'Use it to keep options in view and make opportunity costs explicit.' },
+  15: { primary: 'criterion_control',        secondary: 'wm_maintenance',           useLine: 'Use it to do expected value without “confidence drift”.' },
+  16: { primary: 'rapid_instructed_control', secondary: 'wrapper_invariant_encoding',useLine:'Use it to zoom in/out without losing the governing rule.' },
+  17: { primary: 'wm_maintenance',           secondary: 'wrapper_invariant_encoding',useLine:'Use it to track second-order effects without dropping key constraints.' },
+  18: { primary: 'criterion_control',        secondary: 'rapid_instructed_control', useLine: 'Use it to choose reversible vs irreversible moves cleanly.' },
+  19: { primary: 'wrapper_invariant_encoding',secondary: 'wm_maintenance',          useLine: 'Use it to think in multipliers rather than one-step wins.' },
+  20: { primary: 'rapid_instructed_control', secondary: 'wm_maintenance',           useLine: 'Use it to preserve optionality while still committing to a next step.' }
+};
 
-  // ---- 1) Try query params (cross-origin safe) ----
-  const unitFromQS = qs.get("unit");
-  const unitNumberQS = unitFromQS ? parseInt(unitFromQS, 10) : null;
-
-  const capIdQS = qs.get("cap");
-  const capLabelQS = qs.get("capLabel");
-  const capDefQS = qs.get("capDef");
-  const capMatchQS = qs.get("capMatch"); // "primary" | "secondary" | "other" (optional)
-  const unitPrimaryCapQS = qs.get("unitPrimaryCap");
-  const unitSecondaryCapQS = qs.get("unitSecondaryCap");
-
-  const gameIdQS = qs.get("game"); // 'anchor_noncat' | 'classic' | 'logic_gated' | 'emotional' | etc.
-  const planQS = qs.get("plan");
-  const zoneQS = qs.get("zone");
-  const strategyQS = qs.get("strategy") || "";
-  const obsQS = qs.get("obs") || "";
-  const moveQS = qs.get("move") || "";
-
-  const settingsQS = {
-    speed: bool01(qs.get("speed")),
-    interference: bool01(qs.get("interference")),
-    handSwitch: bool01(qs.get("hand")),
-  };
-
-  // If the capacity fields exist in QS, treat QS as the “source of truth”.
-  const hasCapInQS = !!(capIdQS || capLabelQS || capDefQS || unitPrimaryCapQS || unitSecondaryCapQS);
-
-  if (hasCapInQS) {
-    const unitNumber = expectedUnitNumber ?? unitNumberQS;
-
-    return {
-      source: "query",
-      isStale: false, // QS is assumed intentional
-      localDate: today,
-      unitNumber: Number.isFinite(unitNumber) ? unitNumber : null,
-
-      gameId: gameIdQS || null,
-      planType: planQS || null,
-      zone: zoneQS || null,
-      swapStrategy: strategyQS,
-
-      settings: settingsQS,
-
-      // capacity focus (user-facing highlight)
-      capacity: {
-        id: capIdQS || null,
-        label: capLabelQS || null,
-        def: capDefQS || null,
-        match: capMatchQS || null,
-        unitPrimary: unitPrimaryCapQS || null,
-        unitSecondary: unitSecondaryCapQS || null,
-      },
-
-      // spike-capture bridge (optional)
-      bridge: {
-        obs: obsQS,
-        move: moveQS,
-      },
-    };
-  }
-
-  // ---- 2) Try localStorage (same-origin only) ----
-  let stored = null;
-  try {
-    stored = safeJSONParse(localStorage.getItem("lastCapacitySession") || "");
-  } catch {
-    stored = null;
-  }
-
-  if (!stored || typeof stored !== "object") {
-    // Nothing available
-    return {
-      source: "none",
-      isStale: false,
-      localDate: today,
-      unitNumber: expectedUnitNumber ?? unitNumberQS ?? null,
-      gameId: gameIdQS || null,
-      planType: planQS || null,
-      zone: zoneQS || null,
-      swapStrategy: strategyQS,
-      settings: settingsQS,
-      capacity: null,
-      bridge: { obs: obsQS, move: moveQS },
-    };
-  }
-
-  const storedDate = stored.localDate || (stored.timestamp ? localYYYYMMDD(new Date(stored.timestamp)) : null);
-  const isStale = !!(storedDate && storedDate !== today);
-
-  // If stale, ignore it (but still allow QS bridge fields).
-  if (isStale) {
-    return {
-      source: "localStorage",
-      isStale: true,
-      localDate: today,
-      unitNumber: expectedUnitNumber ?? unitNumberQS ?? null,
-      gameId: gameIdQS || null,
-      planType: planQS || null,
-      zone: zoneQS || null,
-      swapStrategy: strategyQS,
-      settings: settingsQS,
-      capacity: null,
-      bridge: { obs: obsQS, move: moveQS },
-    };
-  }
-
-  // Normalise from stored payload, but allow QS to override small bits if present.
-  const unitNumber = expectedUnitNumber ?? unitNumberQS ?? stored.unitNumber ?? null;
-  const cap = stored.capacity || {};
-
-  return {
-    source: "localStorage",
-    isStale: false,
-    localDate: storedDate || today,
-    unitNumber: Number.isFinite(parseInt(unitNumber, 10)) ? parseInt(unitNumber, 10) : null,
-
-    gameId: pickFirstNonEmpty(gameIdQS, stored.gameId),
-    planType: pickFirstNonEmpty(planQS, stored.planType),
-    zone: pickFirstNonEmpty(zoneQS, stored.zone),
-    swapStrategy: pickFirstNonEmpty(strategyQS, stored.swapStrategy) || "",
-
-    settings: {
-      speed: settingsQS.speed || !!stored?.settings?.speed,
-      interference: settingsQS.interference || !!stored?.settings?.interference,
-      handSwitch: settingsQS.handSwitch || !!stored?.settings?.handSwitch,
-    },
-
-    capacity: {
-      id: pickFirstNonEmpty(capIdQS, cap.id),
-      label: pickFirstNonEmpty(capLabelQS, cap.label),
-      def: pickFirstNonEmpty(capDefQS, cap.def),
-      match: pickFirstNonEmpty(capMatchQS, cap.match),
-      unitPrimary: pickFirstNonEmpty(unitPrimaryCapQS, cap.unitPrimary),
-      unitSecondary: pickFirstNonEmpty(unitSecondaryCapQS, cap.unitSecondary),
-    },
-
-    bridge: {
-      obs: obsQS || "",
-      move: moveQS || "",
-    },
-
-    // Optional: for richer UI
-    meta: {
-      unitTitle: stored.unitTitle || null,
-      timestamp: stored.timestamp || null,
-    },
+const getUnitTargets = (unitNumber) => {
+  return UNIT_CAPACITY_MAP[unitNumber] || {
+    primary: 'wm_maintenance',
+    secondary: 'interference_control',
+    useLine: 'Use it to run the strategy cleanly in one pass.'
   };
 };
 
-// ---------- convenience: build the UI lines you’ll actually show ----------
-export const buildCapacityHeaderCopy = (handoff) => {
-  const cap = handoff?.capacity;
-  if (!cap?.label) {
-    return {
-      headline: "Nice work on the warm-up",
-      subline: "Now we’ll run one thinking move and use it once in real life today.",
-      badge: null,
-    };
+// Pick ONE capacity focus for the user-facing highlight, best-fit to:
+// (a) actual game wrapper + knobs, AND (b) the unit’s primary/secondary focus.
+const pickCapacityPack = ({ unitNumber, gameId, settings }) => {
+  const targets = getUnitTargets(unitNumber);
+
+  // Knob overrides (these are strong levers in your doc). :contentReference[oaicite:6]{index=6}
+  if (gameId === 'anchor_noncat') {
+    if (settings?.interference) return { ...CAPACITY_FOCI.interference_control, match: (targets.primary === 'interference_control' ? 'primary' : (targets.secondary === 'interference_control' ? 'secondary' : 'other')) };
+    if (settings?.handSwitch)   return { ...CAPACITY_FOCI.rapid_instructed_control, match: (targets.primary === 'rapid_instructed_control' ? 'primary' : (targets.secondary === 'rapid_instructed_control' ? 'secondary' : 'other')) };
+    if (settings?.speed)        return { ...CAPACITY_FOCI.speed_under_load, match: 'other' };
   }
 
+  // Otherwise choose from game signature, preferring unit primary, then secondary, then first signature.
+  const sig = GAME_SIGNATURES[gameId] || GAME_SIGNATURES.anchor_noncat;
+
+  const pickId =
+    sig.includes(targets.primary) ? targets.primary :
+    sig.includes(targets.secondary) ? targets.secondary :
+    sig[0];
+
+  const pack = CAPACITY_FOCI[pickId] || CAPACITY_FOCI.wm_maintenance;
   const match =
-    cap.match === "primary"
-      ? "Today’s focus (matches this unit)"
-      : cap.match === "secondary"
-      ? "Useful today (supports this unit)"
-      : "Today’s focus";
+    pickId === targets.primary ? 'primary' :
+    pickId === targets.secondary ? 'secondary' :
+    'other';
 
-  return {
-    headline: `You just trained: ${cap.label}`,
-    subline: cap.def ? cap.def : "We’ll use that control to run the strategy cleanly.",
-    badge: match,
-  };
+  return { ...pack, match };
 };
+
+// Persist a compact handoff record so the Unit app can read it on load.
+const persistCapacityHandoff = (payload) => {
+  try {
+    localStorage.setItem('lastCapacitySession', JSON.stringify(payload));
+  } catch {}
+};
+
+const persistLastGameSelection = (payload) => {
+  try {
+    localStorage.setItem('lastGameSelection', JSON.stringify(payload));
+  } catch {}
+};
+  
       const [screen, setScreen] = useState('postBreath');
       const [postBreathState, setPostBreathState] = useState(null);
       const [trained3, setTrained3] = useState(null);
@@ -1176,7 +1126,14 @@ const modeToStateMap = {
         const isSwap = recommendation.planType === 'swap_variant';
         const finalGame = swapChoice || recommendation.game;
         const settings = settingsFor(recommendation.planType, selectedChange);
-        const trainingFocus = getTrainingFocus(settings);
+        const targetUnit = userProgress.currentUnit; // the next anchor unit (wheel)
+const capacityPack = pickCapacityPack({
+  unitNumber: targetUnit,
+  gameId: finalGame,               // 'anchor_noncat' | 'classic' | 'logic_gated' | 'emotional'
+  settings
+});
+const trainingFocus = capacityPack.label;
+const unitTargets = getUnitTargets(targetUnit);
 
         const gameUrl = getGameUrl(isSwap, finalGame);
 
