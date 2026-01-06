@@ -531,22 +531,41 @@ if (z) {
   console.log('Zone Check data loaded from localStorage (same device)');
 }
 
-        // STRATEGY 2: Fallback to URL params (cross-device or localStorage blocked)
-        if (!data) {
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.has('mode')) {
-            data = {
-              postBreathMode: urlParams.get('mode'),
-              dose: {
-                level: urlParams.get('dose'),
-                sessions: parseInt(urlParams.get('sessions')),
-                blocks: parseInt(urlParams.get('blocks'))
-              }
-            };
-            console.log('Zone Check data loaded from URL params (cross-device or fallback)');
-          }
-        }
+ // STRATEGY 2: Fallback to URL params (cross-device or localStorage blocked)
+if (!data) {
+  const urlParams = new URLSearchParams(window.location.search);
 
+  // Accept either the raw Zone Coach params OR an already-normalised switcher schema
+  const mode = urlParams.get('mode');
+  const doseLevel = urlParams.get('dose');
+  const sessionsRaw = urlParams.get('sessions');
+  const blocksRaw = urlParams.get('blocks');
+  const localDate = urlParams.get('localDate') || localYYYYMMDD();
+
+  // Safe integer parse (avoid NaN)
+  const toInt = (v, fallback) => {
+    const n = parseInt(v ?? '', 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  if (mode) {
+    data = normaliseZoneTelemetry({
+      postBreathMode: mode,
+      dose: {
+        level: doseLevel || 'amber',
+        sessions: toInt(sessionsRaw, 1),
+        blocks: toInt(blocksRaw, 1),
+        recommendation: doseLevel === 'red'
+          ? 'Recovery recommended today. Keep it light and try again tomorrow.'
+          : 'Proceed with training.'
+      },
+      localDate,
+      timestamp: Date.now()
+    });
+
+    console.log('Zone Check data loaded from URL params (cross-device or fallback)');
+  }
+}
         // FIX: Validate telemetry is from today (treat missing localDate as stale when from localStorage)
         if (data) {
           const todayLocalDate = localYYYYMMDD();
@@ -1309,381 +1328,423 @@ const unitTargets = getUnitTargets(targetUnit);
           </div>
         );
       }
-
-      // SCREEN: After Training
+// SCREEN: After Training
 if (screen === 'afterTraining') {
   const settings = recommendation?.settings || { speed: false, interference: false, handSwitch: false };
-  const unitsToComplete = zoneCheckData?.dose?.sessions || 1;
-  const currentUnitToComplete = userProgress.currentUnit;
+  const totalSessionsToday = zoneCheckData?.dose?.sessions || 1;
 
-  const unitTargets = getUnitTargets(currentUnitToComplete);
+  // Wheel unit is only “the next unit” when today’s game was the Anchor.
+  // For swap sessions we just show “Choose Mindware Unit” and let UnitWheel handle the selection.
+  const currentUnit = userProgress.currentUnit;
 
+  const isAnchorSession = recommendation?.game === 'anchor_noncat';
+
+  // Capacity highlight for THIS screen: tie to the game wrapper actually played
   const capacityPack = pickCapacityPack({
-    unitNumber: currentUnitToComplete,
+    unitNumber: currentUnit,
     gameId: recommendation?.game || 'anchor_noncat',
     settings
   });
-
   const trainingFocus = capacityPack.label;
 
-  const isAnchorSession = recommendation?.game === 'anchor_noncat';
-  const unitInfo = UNIT_METADATA[currentUnitToComplete] || { title: "Mindware Practice", category: "Mindware", time: "≤10 min" };
-        const isAnchorSession = recommendation?.game === 'anchor_noncat';
-        const unitInfo = UNIT_METADATA[currentUnitToComplete] || { title: "Mindware Practice", category: "Mindware", time: "≤10 min" };
+  const unitInfo =
+    UNIT_METADATA[currentUnit] || { title: 'Mindware Practice', category: 'Mindware', time: '≤10 min' };
 
-        const copyBridgeToClipboard = () => {
-          const bridgeText = `Today I trained: ${trainingFocus}. In the game it looked like: ${bridgeObs}. In the next task I will use it by: ${bridgeMove}.`;
-          navigator.clipboard.writeText(bridgeText).then(() => {
-            alert('Bridge copied to clipboard!');
-          }).catch(err => {
-            console.error('Failed to copy:', err);
-          });
-        };
+  const copyBridgeToClipboard = () => {
+    const bridgeText = `Today I trained: ${trainingFocus}. In the game it looked like: ${bridgeObs}. In the next task I will use it by: ${bridgeMove}.`;
+    navigator.clipboard
+      .writeText(bridgeText)
+      .then(() => alert('Bridge copied to clipboard!'))
+      .catch((err) => console.error('Failed to copy:', err));
+  };
 
-        const bridgeComplete = bridgeObs.trim() && bridgeMove.trim();
+  const bridgeComplete = bridgeObs.trim() && bridgeMove.trim();
 
-        return (
-          <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
-            <div className="max-w-2xl mx-auto">
-              <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
-                <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>Spike-capture bridge</h1>
-                <p className="mb-6" style={{ color: '#6D6D6D' }}>20 seconds to lock in what you just trained.</p>
+  return (
+    <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+      <div className="max-w-2xl mx-auto">
+        <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+          <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333' }}>
+            Spike-capture bridge
+          </h1>
+          <p className="mb-6" style={{ color: '#6D6D6D' }}>
+            20 seconds to lock in what you just trained.
+          </p>
 
-                {/* Visual indicator for multi-session flow */}
-                {sessionsCompletedToday > 0 && (
-                  <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#E8F4FF', border: '2px solid #2764B7' }}>
-                    <p className="font-semibold" style={{ color: '#333333' }}>
-                      ✓ Session {sessionsCompletedToday} Complete!
-                    </p>
-                    <p className="text-sm" style={{ color: '#6D6D6D' }}>
-                      Starting session {Math.min(sessionsCompletedToday + 1, unitsToComplete)} of {unitsToComplete}
-                    </p>
-                  </div>
-                )}
+          {/* Visual indicator for multi-session flow */}
+          {sessionsCompletedToday > 0 && (
+            <div
+              className="p-4 rounded-lg mb-6"
+              style={{ backgroundColor: '#E8F4FF', border: '2px solid #2764B7' }}
+            >
+              <p className="font-semibold" style={{ color: '#333333' }}>
+                ✓ Session {sessionsCompletedToday} complete!
+              </p>
+              <p className="text-sm" style={{ color: '#6D6D6D' }}>
+                Starting session {Math.min(sessionsCompletedToday + 1, totalSessionsToday)} of {totalSessionsToday}
+              </p>
+            </div>
+          )}
 
-                <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#E8F4FF', border: '2px solid #2764B7' }}>
-                  <p className="font-semibold" style={{ color: '#333333' }}>
-                    Today I trained: <span style={{ color: '#2764B7' }}>{trainingFocus}</span>
-                  </p>
+          <div
+            className="p-4 rounded-lg mb-6"
+            style={{ backgroundColor: '#E8F4FF', border: '2px solid #2764B7' }}
+          >
+            <p className="font-semibold" style={{ color: '#333333' }}>
+              Today I trained: <span style={{ color: '#2764B7' }}>{trainingFocus}</span>
+            </p>
 
-                  <label className="block text-sm font-semibold mt-4 mb-2" style={{ color: '#333333' }}>
-                    In the game it looked like… (one observation)
-                  </label>
-                  <input type="text" value={bridgeObs} onChange={(e) => setBridgeObs(e.target.value)}
-                    className="w-full p-3 rounded border-2" style={{ borderColor: '#E0E0E0' }}
-                    placeholder="E.g., 'I stopped guessing and waited for certainty'..." />
+            <label className="block text-sm font-semibold mt-4 mb-2" style={{ color: '#333333' }}>
+              In the game it looked like… (one observation)
+            </label>
+            <input
+              type="text"
+              value={bridgeObs}
+              onChange={(e) => setBridgeObs(e.target.value)}
+              className="w-full p-3 rounded border-2"
+              style={{ borderColor: '#E0E0E0' }}
+              placeholder="E.g., 'I stopped guessing and waited for certainty'..."
+            />
 
-                  <label className="block text-sm font-semibold mt-4 mb-2" style={{ color: '#333333' }}>
-                    In the next task I will use it by… (one mindware move)
-                  </label>
-                  <input type="text" value={bridgeMove} onChange={(e) => setBridgeMove(e.target.value)}
-                    className="w-full p-3 rounded border-2 mb-4" style={{ borderColor: '#E0E0E0' }}
-                    placeholder="E.g., 'I'll write a 2-option trade-off table before deciding'..." />
+            <label className="block text-sm font-semibold mt-4 mb-2" style={{ color: '#333333' }}>
+              In the next task I will use it by… (one mindware move)
+            </label>
+            <input
+              type="text"
+              value={bridgeMove}
+              onChange={(e) => setBridgeMove(e.target.value)}
+              className="w-full p-3 rounded border-2 mb-4"
+              style={{ borderColor: '#E0E0E0' }}
+              placeholder="E.g., 'I’ll write a 2-option trade-off table before deciding'..."
+            />
 
-                  <div className="flex gap-2">
-                    <button onClick={copyBridgeToClipboard} disabled={!bridgeComplete}
-                      className="flex-1 py-2 px-4 rounded-lg font-semibold"
-                      style={{ backgroundColor: bridgeComplete ? '#22AAFF' : '#E0E0E0', color: '#FFFFFF', cursor: bridgeComplete ? 'pointer' : 'not-allowed' }}>
-                      Copy bridge
-                    </button>
-                  </div>
-                </div>
-
-                {/* Unit Exercise Section */}
-                <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: isAnchorSession ? '#F5FFE6' : '#FFF3E0', border: `2px solid ${isAnchorSession ? '#CCFF66' : '#FFB020'}` }}>
-                  <p className="font-semibold mb-2" style={{ color: '#333333' }}>
-                    📚 Next: Mindware Practice
-                  </p>
-                  {isAnchorSession ? (
-                    <>
-                      <p className="text-sm mb-1" style={{ color: '#333333' }}>
-                        Complete Unit {currentUnitToComplete}: "{unitInfo.title}"
-                      </p>
-                      <p className="text-sm mb-4" style={{ color: '#6D6D6D' }}>
-                        {unitInfo.category} • {unitInfo.time} • Session {Math.min(sessionsCompletedToday + 1, unitsToComplete)} of {unitsToComplete}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm mb-3" style={{ color: '#333333' }}>
-                        Choose a mindware unit to practise (manual selection)
-                      </p>
-                      <p className="text-sm mb-4" style={{ color: '#6D6D6D' }}>
-                        Swap sessions don't auto-advance the wheel
-                      </p>
-                    </>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      if (!bridgeComplete) {
-                        alert('Please complete the spike-capture bridge first');
-                        return;
-                      }
-
-                      // Store session type in sessionStorage before navigating
-                      sessionStorage.setItem('currentSessionType', recommendation.game);
-                      sessionStorage.setItem('currentSessionTimestamp', Date.now().toString());
-
-// Persist a handoff record for the Unit app (same-origin read)
-persistCapacityHandoff({
-  localDate: localYYYYMMDD(),
-  timestamp: Date.now(),
-  unitNumber: currentUnitToComplete,
-  unitTitle: unitInfo.title,
-  planType: recommendation.planType,
-  gameId: recommendation.game,
-  settings,
-  zone: postBreathState,
-  swapStrategy: swapStrategy || '',
-  capacity: {
-    id: capacityPack.id,
-    label: capacityPack.label,
-    def: capacityPack.def,
-    match: capacityPack.match,
-    unitPrimary: unitTargets.primary,
-    unitSecondary: unitTargets.secondary
-  }
-});
-                      
-                      // Build context to pass to unit
-const unitContext = {
-  focus: trainingFocus,
-  plan: recommendation.planType,
-  game: recommendation.game,
-  settings: settings,
-  zone: postBreathState,
-  strategy: swapStrategy || '',
-  obs: bridgeObs,
-  move: bridgeMove,
-  sessionsCompleted: sessionsCompletedToday,
-  totalSessions: zoneCheckData?.dose?.sessions || 1,
-
-  // New: capacity focus handoff
-  capId: cap.id,
-  capLabel: cap.label,
-  capDef: cap.def,
-  capMatch: cap.match,
-  unitPrimaryCap: targets.primary,
-  unitSecondaryCap: targets.secondary
-};
-
-                      // FIX: Persist the last plan state so we can restore it after unit completion
-                      try {
-                        sessionStorage.setItem('lastPlanState', JSON.stringify({
-                          postBreathState,
-                          trained3,
-                          progress,
-                          routine,
-                          robustness,
-                          click,
-                          deploy,
-                          spikeGap,
-                          breaksFirst,
-                          selectedChange,
-                          swapChoice,
-                          swapStrategy,
-                          recommendation: { ...recommendation, settings }
-                        }));
-                      } catch {}
-
-                      // For anchor: open current unit automatically
-                      if (isAnchorSession) {
-                        const unitUrl = buildOperatorUrl(currentUnitToComplete, unitContext);
-                        window.location.href = unitUrl; // Navigate to unit app
-                      } else {
-                        // For swap: show unit wheel for manual selection
-                        setScreen('unitWheel');
-                      }
-                    }}
-                    disabled={!bridgeComplete}
-                    className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
-                    style={{
-                      backgroundColor: bridgeComplete ? '#2764B7' : '#E0E0E0',
-                      color: bridgeComplete ? '#FFFFFF' : '#6D6D6D',
-                      cursor: bridgeComplete ? 'pointer' : 'not-allowed'
-                    }}>
-                    {isAnchorSession
-                      ? `Start Unit ${currentUnitToComplete}`
-                      : "Choose Mindware Unit"}
-                  </button>
-                </div>
-
-                {/* GPT Deployment Button */}
-                <button onClick={() => window.open(GPT_URL, '_blank', 'noopener,noreferrer')}
-                  disabled={!bridgeComplete} className="w-full py-2 px-4 rounded-lg font-semibold border-2 mb-6"
-                  style={{
-                    borderColor: bridgeComplete ? '#2764B7' : '#E0E0E0',
-                    color: bridgeComplete ? '#2764B7' : '#6D6D6D',
-                    backgroundColor: '#FFFFFF',
-                    cursor: bridgeComplete ? 'pointer' : 'not-allowed'
-                  }}>
-                  Open real-world deployment (GPT)
-                </button>
-
-                <div className="mb-6">
-                  <p className="font-semibold mb-3" style={{ color: '#333333' }}>How did today's session feel overall?</p>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'smooth', label: 'Smooth and productive' },
-                      { id: 'ok', label: 'OK / mixed' },
-                      { id: 'struggle', label: 'Struggled / off' }
-                    ].map(opt => (
-                      <button key={opt.id} onClick={() => setSessionFeel(opt.id)}
-                        className="w-full p-3 rounded-lg border-2 text-left transition-all"
-                        style={{
-                          borderColor: sessionFeel === opt.id ? '#2764B7' : '#E0E0E0',
-                          backgroundColor: sessionFeel === opt.id ? '#E8F4FF' : '#FFFFFF',
-                          color: '#333333'
-                        }}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <p className="font-semibold mb-3" style={{ color: '#333333' }}>Did the n-back session carry over into the strategy practice?</p>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'yes_clearer', label: 'Yes — clearer thinking' },
-                      { id: 'yes_focus', label: 'Yes — better focus / steadier' },
-                      { id: 'no_separate', label: 'No — it felt separate today' },
-                      { id: 'no_practice', label: "I didn't do the strategy practice" }
-                    ].map(opt => (
-                      <button key={opt.id} onClick={() => setCarryOver(opt.id)}
-                        className="w-full p-3 rounded-lg border-2 text-left transition-all"
-                        style={{
-                          borderColor: carryOver === opt.id ? '#2764B7' : '#E0E0E0',
-                          backgroundColor: carryOver === opt.id ? '#E8F4FF' : '#FFFFFF',
-                          color: '#333333'
-                        }}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-sm mt-2" style={{ color: '#6D6D6D' }}>
-                    Carry over = you could apply the mindware more cleanly right after training.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#FFF9E6', border: '1px solid #FFD700' }}>
-                  <p className="text-sm" style={{ color: '#333333' }}>
-                    💡 Before your next session, try the same mindware strategy once in real life. Think about the situation you might apply it in now, and what might cue it for you.
-                  </p>
-                </div>
-
-                {/* Progress Display */}
-                <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#F5F5F5' }}>
-                  <p className="text-sm font-semibold mb-2" style={{ color: '#333333' }}>Your Progress:</p>
-                  <p className="text-sm" style={{ color: '#333333' }}>
-                    Anchor sessions: {userProgress.anchorSessionsCompleted} of 20 complete
-                  </p>
-                  <p className="text-sm" style={{ color: '#333333' }}>
-                    Current unit: {userProgress.currentUnit} of 20
-                  </p>
-                  {userProgress.swapSessionsCompleted > 0 && (
-                    <p className="text-sm" style={{ color: '#6D6D6D' }}>
-                      Swap sessions: {userProgress.swapSessionsCompleted}
-                    </p>
-                  )}
-                </div>
-
-                <button onClick={() => {
-                  // Reset state for next session (do NOT wipe today's persisted counter)
-                  setScreen('postBreath');
-                  setRecommendation(null);
-                  setPostBreathState(null);
-                  setTrained3(null);
-                  setProgress(null);
-                  setRoutine(null);
-                  setRobustness(null);
-                  setClick(null);
-                  setClickNote('');
-                  setDeploy(null);
-                  setBreaksFirst(null);
-                  setSwapChoice(null);
-                  setSwapStrategy(null);
-                  setSessionFeel(null);
-                  setCarryOver(null);
-                  setSpikeGap(null);
-                  setBridgeObs('');
-                  setBridgeMove('');
-                  setSelectedChange('none');
-                  setSessionsCompletedToday(loadSessionsCompletedToday());
-                }} className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
-                  style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}>
-                  Done
-                </button>
-              </div>
+            <div className="flex gap-2">
+              <button
+                onClick={copyBridgeToClipboard}
+                disabled={!bridgeComplete}
+                className="flex-1 py-2 px-4 rounded-lg font-semibold"
+                style={{
+                  backgroundColor: bridgeComplete ? '#22AAFF' : '#E0E0E0',
+                  color: '#FFFFFF',
+                  cursor: bridgeComplete ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Copy bridge
+              </button>
             </div>
           </div>
-        );
-      }
 
-      // SCREEN: Unit Wheel (for swap sessions - manual unit selection)
-      if (screen === 'unitWheel') {
-        const settings = recommendation?.settings || { speed: false, interference: false, handSwitch: false };
-        const trainingFocus = getTrainingFocus(settings);
+          {/* Unit Exercise Section */}
+          <div
+            className="p-4 rounded-lg mb-6"
+            style={{
+              backgroundColor: isAnchorSession ? '#F5FFE6' : '#FFF3E0',
+              border: `2px solid ${isAnchorSession ? '#CCFF66' : '#FFB020'}`
+            }}
+          >
+            <p className="font-semibold mb-2" style={{ color: '#333333' }}>
+              📚 Next: Mindware practice
+            </p>
 
-        return (
-          <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
-            <div className="max-w-3xl mx-auto">
-              <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
-                <h1 className="text-3xl font-bold mb-4" style={{ color: '#333333' }}>Choose Your Mindware Unit</h1>
-                <p className="mb-6" style={{ color: '#6D6D6D' }}>
-                  Since you did a swap game today, select which mindware unit you'd like to practise:
+            {isAnchorSession ? (
+              <>
+                <p className="text-sm mb-1" style={{ color: '#333333' }}>
+                  Complete Unit {currentUnit}: “{unitInfo.title}”
                 </p>
+                <p className="text-sm mb-4" style={{ color: '#6D6D6D' }}>
+                  {unitInfo.category} • {unitInfo.time} • Session{' '}
+                  {Math.min(sessionsCompletedToday + 1, totalSessionsToday)} of {totalSessionsToday}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm mb-3" style={{ color: '#333333' }}>
+                  Choose a mindware unit to practise (manual selection)
+                </p>
+                <p className="text-sm mb-4" style={{ color: '#6D6D6D' }}>
+                  Swap sessions don’t auto-advance the wheel.
+                </p>
+              </>
+            )}
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                  {Array.from({length: 20}, (_, i) => i + 1).map(unit => {
-                    const isCompleted = userProgress.unitsCompleted.includes(unit);
-                    return (
-                      <button
-                        key={unit}
-                        onClick={() => {
-const targets = getUnitTargets(unit);
-const cap = pickCapacityPack({
-  unitNumber: unit,
-  gameId: recommendation?.game || 'anchor_noncat',
-  settings
-});
+            <button
+              onClick={() => {
+                if (!bridgeComplete) {
+                  alert('Please complete the spike-capture bridge first');
+                  return;
+                }
 
-persistCapacityHandoff({
-  localDate: localYYYYMMDD(),
-  timestamp: Date.now(),
-  unitNumber: unit,
-  unitTitle: UNIT_METADATA[unit]?.title || '',
-  planType: recommendation.planType,
-  gameId: recommendation.game,
-  settings,
-  zone: postBreathState,
-  swapStrategy: swapStrategy || '',
-  capacity: {
-    id: cap.id,
-    label: cap.label,
-    def: cap.def,
-    match: cap.match,
-    unitPrimary: targets.primary,
-    unitSecondary: targets.secondary
-  }
-});
+                // Store session type before navigating (used on return to classify anchor vs swap completion)
+                try {
+                  sessionStorage.setItem('currentSessionType', recommendation?.game || '');
+                  sessionStorage.setItem('currentSessionTimestamp', String(Date.now()));
+                } catch {}
 
-                          const unitUrl = buildOperatorUrl(unit, unitContext);
-                          window.location.href = unitUrl;
-                        }}
-                        className="p-4 rounded-lg border-2 font-semibold transition-all"
-                        style={{
-                          borderColor: isCompleted ? '#CCFF66' : '#E0E0E0',
-                          backgroundColor: isCompleted ? '#F5FFE6' : '#FFFFFF',
-                          color: '#333333'
-                        }}>
-                        Unit {unit}
-                        {isCompleted && <div className="text-xs mt-1" style={{ color: '#6D6D6D' }}>✓ Complete</div>}
-                      </button>
-                    );
-                  })}
-                </div>
+                // Persist a handoff record for the Unit app (same-origin read)
+                // NOTE: For swap sessions the unit number here is the wheel unit, not necessarily what the user will pick.
+                // The real unit is chosen on the Unit Wheel screen.
+                const unitTargets = getUnitTargets(currentUnit);
+
+                persistCapacityHandoff({
+                  localDate: localYYYYMMDD(),
+                  timestamp: Date.now(),
+                  unitNumber: currentUnit,
+                  unitTitle: unitInfo.title,
+                  planType: recommendation?.planType || '',
+                  gameId: recommendation?.game || '',
+                  settings,
+                  zone: postBreathState,
+                  swapStrategy: swapStrategy || '',
+                  capacity: {
+                    id: capacityPack.id,
+                    label: capacityPack.label,
+                    def: capacityPack.def,
+                    match: capacityPack.match,
+                    unitPrimary: unitTargets.primary,
+                    unitSecondary: unitTargets.secondary
+                  }
+                });
+
+                // Build context to pass to the Unit app (query params)
+                const unitContext = {
+                  focus: trainingFocus,
+                  plan: recommendation?.planType || '',
+                  game: recommendation?.game || '',
+                  settings,
+                  zone: postBreathState,
+                  strategy: swapStrategy || '',
+                  obs: bridgeObs,
+                  move: bridgeMove,
+                  sessionsCompleted: sessionsCompletedToday,
+                  totalSessions: totalSessionsToday,
+
+                  // Capacity focus handoff
+                  capId: capacityPack.id,
+                  capLabel: capacityPack.label,
+                  capDef: capacityPack.def,
+                  capMatch: capacityPack.match,
+
+                  // Unit declared targets (Option B)
+                  unitPrimaryCap: unitTargets.primary,
+                  unitSecondaryCap: unitTargets.secondary
+                };
+
+                // Persist the last plan state so we can restore it after unit completion
+                try {
+                  sessionStorage.setItem(
+                    'lastPlanState',
+                    JSON.stringify({
+                      postBreathState,
+                      trained3,
+                      progress,
+                      routine,
+                      robustness,
+                      click,
+                      deploy,
+                      spikeGap,
+                      breaksFirst,
+                      selectedChange,
+                      swapChoice,
+                      swapStrategy,
+                      recommendation: { ...recommendation, settings }
+                    })
+                  );
+                } catch {}
+
+                if (isAnchorSession) {
+                  const unitUrl = buildOperatorUrl(currentUnit, unitContext);
+                  window.location.href = unitUrl;
+                } else {
+                  setScreen('unitWheel');
+                }
+              }}
+              disabled={!bridgeComplete}
+              className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+              style={{
+                backgroundColor: bridgeComplete ? '#2764B7' : '#E0E0E0',
+                color: bridgeComplete ? '#FFFFFF' : '#6D6D6D',
+                cursor: bridgeComplete ? 'pointer' : 'not-allowed'
+              }}
+            >
+              {isAnchorSession ? `Start Unit ${currentUnit}` : 'Choose Mindware Unit'}
+            </button>
+          </div>
+
+          {/* GPT Deployment Button */}
+          <button
+            onClick={() => window.open(GPT_URL, '_blank', 'noopener,noreferrer')}
+            disabled={!bridgeComplete}
+            className="w-full py-2 px-4 rounded-lg font-semibold border-2 mb-6"
+            style={{
+              borderColor: bridgeComplete ? '#2764B7' : '#E0E0E0',
+              color: bridgeComplete ? '#2764B7' : '#6D6D6D',
+              backgroundColor: '#FFFFFF',
+              cursor: bridgeComplete ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Open real-world deployment (GPT)
+          </button>
+
+          {/* Reflection (unchanged) */}
+          <div className="mb-6">
+            <p className="font-semibold mb-3" style={{ color: '#333333' }}>
+              How did today’s session feel overall?
+            </p>
+            <div className="space-y-2">
+              {[
+                { id: 'smooth', label: 'Smooth and productive' },
+                { id: 'ok', label: 'OK / mixed' },
+                { id: 'struggle', label: 'Struggled / off' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setSessionFeel(opt.id)}
+                  className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                  style={{
+                    borderColor: sessionFeel === opt.id ? '#2764B7' : '#E0E0E0',
+                    backgroundColor: sessionFeel === opt.id ? '#E8F4FF' : '#FFFFFF',
+                    color: '#333333'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <p className="font-semibold mb-3" style={{ color: '#333333' }}>
+              Did the n-back session carry over into the strategy practice?
+            </p>
+            <div className="space-y-2">
+              {[
+                { id: 'yes_clearer', label: 'Yes — clearer thinking' },
+                { id: 'yes_focus', label: 'Yes — better focus / steadier' },
+                { id: 'no_separate', label: 'No — it felt separate today' },
+                { id: 'no_practice', label: "I didn't do the strategy practice" }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setCarryOver(opt.id)}
+                  className="w-full p-3 rounded-lg border-2 text-left transition-all"
+                  style={{
+                    borderColor: carryOver === opt.id ? '#2764B7' : '#E0E0E0',
+                    backgroundColor: carryOver === opt.id ? '#E8F4FF' : '#FFFFFF',
+                    color: '#333333'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-sm mt-2" style={{ color: '#6D6D6D' }}>
+              Carry over = you could apply the mindware more cleanly right after training.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#FFF9E6', border: '1px solid #FFD700' }}>
+            <p className="text-sm" style={{ color: '#333333' }}>
+              💡 Before your next session, try the same mindware strategy once in real life. Think about the situation
+              you might apply it in now, and what might cue it for you.
+            </p>
+          </div>
+
+          {/* Progress Display */}
+          <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#F5F5F5' }}>
+            <p className="text-sm font-semibold mb-2" style={{ color: '#333333' }}>
+              Your progress:
+            </p>
+            <p className="text-sm" style={{ color: '#333333' }}>
+              Anchor sessions: {userProgress.anchorSessionsCompleted} of 20 complete
+            </p>
+            <p className="text-sm" style={{ color: '#333333' }}>
+              Current unit: {userProgress.currentUnit} of 20
+            </p>
+            {userProgress.swapSessionsCompleted > 0 && (
+              <p className="text-sm" style={{ color: '#6D6D6D' }}>
+                Swap sessions: {userProgress.swapSessionsCompleted}
+              </p>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              // Reset state for next session (do NOT wipe today's persisted counter)
+              setScreen('postBreath');
+              setRecommendation(null);
+              setPostBreathState(null);
+              setTrained3(null);
+              setProgress(null);
+              setRoutine(null);
+              setRobustness(null);
+              setClick(null);
+              setClickNote('');
+              setDeploy(null);
+              setBreaksFirst(null);
+              setSwapChoice(null);
+              setSwapStrategy(null);
+              setSessionFeel(null);
+              setCarryOver(null);
+              setSpikeGap(null);
+              setBridgeObs('');
+              setBridgeMove('');
+              setSelectedChange('none');
+              setSessionsCompletedToday(loadSessionsCompletedToday());
+            }}
+            className="w-full py-3 px-6 rounded-lg font-semibold transition-all"
+            style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+                    // Persist handoff record (same-origin read)
+                    persistCapacityHandoff({
+                      localDate: localYYYYMMDD(),
+                      timestamp: Date.now(),
+                      unitNumber: unit,
+                      unitTitle: UNIT_METADATA[unit]?.title || '',
+                      planType: recommendation.planType,
+                      gameId: recommendation.game,
+                      settings,
+                      zone: postBreathState,
+                      swapStrategy: swapStrategy || '',
+                      capacity: {
+                        id: capacityPack.id,
+                        label: capacityPack.label,
+                        def: capacityPack.def,
+                        match: capacityPack.match,
+                        unitPrimary: unitTargets.primary,
+                        unitSecondary: unitTargets.secondary
+                      }
+                    });
+
+                    // Navigate to the chosen unit
+                    const unitCtx = makeUnitContextFor(unit);
+const unitUrl = buildOperatorUrl(unit, unitCtx);
+window.location.href = unitUrl;
+                  }}
+                  className="p-4 rounded-lg border-2 font-semibold transition-all"
+                  style={{
+                    borderColor: isCompleted ? '#CCFF66' : '#E0E0E0',
+                    backgroundColor: isCompleted ? '#F5FFE6' : '#FFFFFF',
+                    color: '#333333'
+                  }}
+                >
+                  Unit {unit}
+                  {isCompleted && (
+                    <div className="text-xs mt-1" style={{ color: '#6D6D6D' }}>
+                      ✓ Complete
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
                 <button
                   onClick={() => setScreen('afterTraining')}
