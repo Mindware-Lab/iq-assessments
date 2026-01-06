@@ -940,7 +940,96 @@ if (ctx.unitSecondaryCap) url.searchParams.set('unitSecondaryCap', ctx.unitSecon
           </div>
         );
       }
+      // SCREEN: Unit Wheel
+      if (screen === 'unitWheel') {
+  const settings = recommendation?.settings || { speed: false, interference: false, handSwitch: false };
+  const gameId = recommendation?.game || 'anchor_noncat'; // wrapper actually played
+  const bridgeComplete = bridgeObs.trim() && bridgeMove.trim();
 
+  return (
+    <div className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#E0E0E0' }}>
+      <div className="max-w-3xl mx-auto">
+        <div className="rounded-lg shadow-lg p-6 md:p-8" style={{ backgroundColor: '#FFFFFF' }}>
+          <h1 className="text-3xl font-bold mb-4" style={{ color: '#333333' }}>
+            Choose Your Mindware Unit
+          </h1>
+          <p className="mb-6" style={{ color: '#6D6D6D' }}>
+            Since you did a swap game today, select which mindware unit you’d like to practise:
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {Array.from({ length: 20 }, (_, i) => i + 1).map((unit) => {
+              const isCompleted = userProgress.unitsCompleted.includes(unit);
+
+              return (
+                <button
+                  key={unit}
+                  disabled={!bridgeComplete}
+                  onClick={() => {
+                    if (!bridgeComplete) {
+                      alert('Please complete the spike-capture bridge first');
+                      return;
+                    }
+
+                    const unitTargets = getUnitTargets(unit);
+                    const cap = pickCapacityPack({ unitNumber: unit, gameId, settings });
+
+                    persistCapacityHandoff({
+                      localDate: localYYYYMMDD(),
+                      timestamp: Date.now(),
+                      unitNumber: unit,
+                      unitTitle: UNIT_METADATA[unit]?.title || '',
+                      planType: recommendation?.planType || '',
+                      gameId,
+                      settings,
+                      zone: postBreathState,
+                      swapStrategy: swapStrategy || '',
+                      capacity: {
+                        id: cap.id,
+                        label: cap.label,
+                        def: cap.def,
+                        match: cap.match,
+                        unitPrimary: unitTargets.primary,
+                        unitSecondary: unitTargets.secondary
+                      }
+                    });
+
+                    const unitCtx = makeUnitContextFor(unit, gameId, settings);
+                    const unitUrl = buildOperatorUrl(unit, unitCtx);
+                    window.location.href = unitUrl;
+                  }}
+                  className="p-4 rounded-lg border-2 font-semibold transition-all"
+                  style={{
+                    borderColor: isCompleted ? '#CCFF66' : '#E0E0E0',
+                    backgroundColor: isCompleted ? '#F5FFE6' : '#FFFFFF',
+                    color: '#333333',
+                    opacity: bridgeComplete ? 1 : 0.6,
+                    cursor: bridgeComplete ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  Unit {unit}
+                  {isCompleted && (
+                    <div className="text-xs mt-1" style={{ color: '#6D6D6D' }}>
+                      ✓ Complete
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setScreen('afterTraining')}
+            className="w-full py-3 px-6 rounded-lg font-semibold border-2 transition-all"
+            style={{ borderColor: '#2764B7', color: '#2764B7', backgroundColor: '#FFFFFF' }}
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
       // SCREEN: Post-Breath
       if (screen === 'postBreath') {
         const states = [
@@ -1505,15 +1594,11 @@ if (screen === 'afterTraining') {
                   return;
                 }
 
-                // Store session type before navigating (used on return to classify anchor vs swap completion)
                 try {
                   sessionStorage.setItem('currentSessionType', recommendation?.game || '');
                   sessionStorage.setItem('currentSessionTimestamp', String(Date.now()));
                 } catch {}
 
-                // Persist a handoff record for the Unit app (same-origin read)
-                // NOTE: For swap sessions the unit number here is the wheel unit, not necessarily what the user will pick.
-                // The real unit is chosen on the Unit Wheel screen.
                 const unitTargets = getUnitTargets(currentUnit);
 
                 persistCapacityHandoff({
@@ -1536,7 +1621,6 @@ if (screen === 'afterTraining') {
                   }
                 });
 
-                // Build context to pass to the Unit app (query params)
                 const unitContext = {
                   focus: trainingFocus,
                   plan: recommendation?.planType || '',
@@ -1549,18 +1633,15 @@ if (screen === 'afterTraining') {
                   sessionsCompleted: sessionsCompletedToday,
                   totalSessions: totalSessionsToday,
 
-                  // Capacity focus handoff
                   capId: capacityPack.id,
                   capLabel: capacityPack.label,
                   capDef: capacityPack.def,
                   capMatch: capacityPack.match,
 
-                  // Unit declared targets (Option B)
                   unitPrimaryCap: unitTargets.primary,
                   unitSecondaryCap: unitTargets.secondary
                 };
 
-                // Persist the last plan state so we can restore it after unit completion
                 try {
                   sessionStorage.setItem(
                     'lastPlanState',
@@ -1732,9 +1813,6 @@ if (screen === 'afterTraining') {
     </div>
   );
 }
-
-                    // Navigate to the chosen unit
-                    const unitCtx = makeUnitContextFor(unit);
 const unitUrl = buildOperatorUrl(unit, unitCtx);
 window.location.href = unitUrl;
                   }}
