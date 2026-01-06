@@ -1165,6 +1165,21 @@ const unitTargets = getUnitTargets(targetUnit);
                   <p className="text-sm" style={{ color: '#6D6D6D' }}>Keep settings stable today. The point is a clean probe, not maximum difficulty.</p>
                 </div>
 
+                <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: '#F5F5F5' }}>
+  <h3 className="font-bold mb-2" style={{ color: '#333333' }}>Today’s training focus</h3>
+  <p style={{ color: '#333333' }}>
+    You’re training: <b>{capacityPack.label}</b>
+  </p>
+  <p className="text-sm mt-1" style={{ color: '#6D6D6D' }}>
+    {capacityPack.def}
+  </p>
+  <p className="text-sm mt-3" style={{ color: '#333333' }}>
+    Next, you’ll use it in <b>Unit {targetUnit}</b>: {UNIT_METADATA[targetUnit]?.title || 'Mindware practice'}.
+  </p>
+  <p className="text-sm mt-1" style={{ color: '#6D6D6D' }}>
+    {unitTargets.useLine}
+  </p>
+</div>
                 <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#F5FFE6', border: '1px solid #CCFF66' }}>
                   <p style={{ color: '#333333' }}>{recipes[recommendation.planType]}</p>
                   {isSwap && <p className="mt-2 font-semibold" style={{ color: '#333333' }}>Swap sessions are usually just one day. Tomorrow's Anchor session is where we check if it helped.</p>}
@@ -1254,7 +1269,17 @@ const unitTargets = getUnitTargets(targetUnit);
                   </div>
                 )}
 
-                <button onClick={() => window.open(gameUrl, '_blank', 'noopener,noreferrer')}
+                <button onClick={() => {
+  persistLastGameSelection({
+    localDate: localYYYYMMDD(),
+    timestamp: Date.now(),
+    unitTarget: userProgress.currentUnit,
+    planType: recommendation.planType,
+    gameId: finalGame,
+    settings
+  });
+  window.open(gameUrl, '_blank', 'noopener,noreferrer');
+}}
                   className="w-full py-3 px-6 rounded-lg font-semibold transition-all shadow-md mb-3"
                   style={{ backgroundColor: '#2764B7', color: '#FFFFFF' }}>
                   Open today's game (new tab)
