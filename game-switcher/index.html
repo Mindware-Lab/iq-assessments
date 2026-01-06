@@ -405,6 +405,35 @@ const persistLastGameSelection = (payload) => {
       const [selectedChange, setSelectedChange] = useState('none');
       const [sessionsCompletedToday, setSessionsCompletedToday] = useState(() => loadSessionsCompletedToday());
 
+      const makeUnitContextFor = (unitNumber, gameId, settings) => {
+  const unitTargets = getUnitTargets(unitNumber);
+  const cap = pickCapacityPack({ unitNumber, gameId, settings });
+
+  return {
+    // Unit app needs these
+    focus: cap.label,
+    plan: recommendation?.planType || '',
+    game: gameId,
+    settings,
+    zone: postBreathState,
+    strategy: swapStrategy || '',
+    obs: bridgeObs,
+    move: bridgeMove,
+    sessionsCompleted: sessionsCompletedToday,
+    totalSessions: zoneCheckData?.dose?.sessions || 1,
+
+    // Capacity focus handoff
+    capId: cap.id,
+    capLabel: cap.label,
+    capDef: cap.def,
+    capMatch: cap.match,
+
+    // Unit targets (Option B)
+    unitPrimaryCap: unitTargets.primary,
+    unitSecondaryCap: unitTargets.secondary
+  };
+};
+
       // Save progress whenever it changes
       React.useEffect(() => {
         try {
@@ -1703,27 +1732,6 @@ if (screen === 'afterTraining') {
     </div>
   );
 }
-
-                    // Persist handoff record (same-origin read)
-                    persistCapacityHandoff({
-                      localDate: localYYYYMMDD(),
-                      timestamp: Date.now(),
-                      unitNumber: unit,
-                      unitTitle: UNIT_METADATA[unit]?.title || '',
-                      planType: recommendation.planType,
-                      gameId: recommendation.game,
-                      settings,
-                      zone: postBreathState,
-                      swapStrategy: swapStrategy || '',
-                      capacity: {
-                        id: capacityPack.id,
-                        label: capacityPack.label,
-                        def: capacityPack.def,
-                        match: capacityPack.match,
-                        unitPrimary: unitTargets.primary,
-                        unitSecondary: unitTargets.secondary
-                      }
-                    });
 
                     // Navigate to the chosen unit
                     const unitCtx = makeUnitContextFor(unit);
