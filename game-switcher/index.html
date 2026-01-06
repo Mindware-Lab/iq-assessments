@@ -12,7 +12,7 @@
 <body>
   <div id="root"></div>
 
-  <script type="text/babel">
+  <script type="text/babel" data-presets="env,react">
     const { useState } = React;
 
     const SessionSwitcher = () => {
@@ -25,7 +25,7 @@
       };
 
       // ---- Per-day session counter (FIX: persist across reloads) ----
-      const todayKey = () => `sessionsCompleted_${new Date().toISOString().slice(0,10)}`;
+      const todayKey = () => `sessionsCompleted_${localYYYYMMDD()}`;
 
       const loadSessionsCompletedToday = () => {
         try {
@@ -141,7 +141,7 @@
         20: { title: "Strategic optionality", category: "Strategic Action", time: "≤10 min" }
       };
 
-// ----- Zone Check telemetry adapter (Zone Coach v2 -> Switcher schema) -----
+// ----- Zone Check telemetry adapter (Zone Coach -> Switcher schema) -----
 const localYYYYMMDD = (d = new Date()) => {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -152,117 +152,61 @@ const localYYYYMMDD = (d = new Date()) => {
 const normaliseZoneTelemetry = (raw) => {
   if (!raw || typeof raw !== 'object') return null;
 
-  // Helper: always ensure localDate exists
   const ensuredLocalDate =
     raw.localDate ||
     (raw.timestamp ? localYYYYMMDD(new Date(raw.timestamp)) : localYYYYMMDD());
 
-  // Already in switcher schema (has dose + postBreathMode)
+  // Already in switcher schema
   if (raw.dose && raw.postBreathMode) {
     return { ...raw, localDate: ensuredLocalDate };
   }
 
-  // Detect Zone Coach schema by SHAPE (not version string)
+  // Detect Zone Coach schema by shape
   const looksLikeZoneCoach =
     !!raw?.breathing?.postBreathSelfReport ||
     raw?.gate?.blockTraining !== undefined ||
     raw?.gate?.postInZone !== undefined ||
     raw?.gate?.preInZone !== undefined;
 
-  if (looksLikeZoneCoach) {
-    const report = raw?.breathing?.postBreathSelfReport;
-
-    const reportMap = {
-      'Subcritical': 'Subcritical (flat/demotivated)',
-      'Ψ-band': 'Ψ-band (in the zone)',
-      'Supercritical – explore': 'Supercritical: scattered explore',
-      'Supercritical – rigid control': 'Supercritical: rigid control',
-      'Not sure': 'Mixed / unclear'
-    };
-
-    const postBreathMode =
-      reportMap[report] ||
-      (raw?.prototypes?.modeLabelPublic ? String(raw.prototypes.modeLabelPublic) : 'Mixed / unclear');
-
-    const postInZone = !!raw?.gate?.postInZone;
-    const blockTraining = !!raw?.gate?.blockTraining;
-
-    const dose = {
-      level: blockTraining ? 'red' : (postInZone ? 'green' : 'amber'),
-      sessions: blockTraining ? 0 : 1,
-      blocks: blockTraining ? 0 : 1,
-      recommendation: blockTraining
-        ? 'Recovery recommended today. Keep it light and try again tomorrow.'
-        : 'Proceed with training.'
-    };
-
-    return {
-      localDate: ensuredLocalDate,
-      postBreathMode,
-      dose,
-      timestamp: raw.timestamp,
-      rawZoneCheck: raw
-    };
+  if (!looksLikeZoneCoach) {
+    // Unknown shape, but keep a usable localDate
+    return { ...raw, localDate: ensuredLocalDate };
   }
 
-  // Unknown shape: still attach localDate so your "today" check doesn't nuke it
-  return { ...raw, localDate: ensuredLocalDate };
-};
-  }
+  const report = raw?.breathing?.postBreathSelfReport;
+  const reportMap = {
+    'Subcritical': 'Subcritical (flat/demotivated)',
+    'Ψ-band': 'Ψ-band (in the zone)',
+    'Supercritical – explore': 'Supercritical: scattered explore',
+    'Supercritical – rigid control': 'Supercritical: rigid control',
+    'Not sure': 'Mixed / unclear'
+  };
 
-  // Zone Coach schema (your Zone Coach app)
-  if (raw.version && String(raw.version).startsWith('zonecheck')) {
-    const report = raw?.breathing?.postBreathSelfReport;
+  const postBreathMode =
+    reportMap[report] ||
+    (raw?.prototypes?.modeLabelPublic ? String(raw.prototypes.modeLabelPublic) : 'Mixed / unclear');
 
-    const reportMap = {
-      'Subcritical': 'Subcritical (flat/demotivated)',
-      'Ψ-band': 'Ψ-band (in the zone)',
-      'Supercritical – explore': 'Supercritical: scattered explore',
-      'Supercritical – rigid control': 'Supercritical: rigid control',
-      'Not sure': 'Mixed / unclear'
-    };
+  const postInZone = !!raw?.gate?.postInZone;
+  const blockTraining = !!raw?.gate?.blockTraining;
 
-    const postBreathMode =
-      reportMap[report] ||
-      (raw?.prototypes?.modeLabelPublic ? String(raw.prototypes.modeLabelPublic) : 'Mixed / unclear');
+  const dose = {
+    level: blockTraining ? 'red' : (postInZone ? 'green' : 'amber'),
+    sessions: blockTraining ? 0 : 1,
+    blocks: blockTraining ? 0 : 1,
+    recommendation: blockTraining
+      ? 'Recovery recommended today. Keep it light and try again tomorrow.'
+      : 'Proceed with training.'
+  };
 
-    const preInZone = !!raw?.gate?.preInZone;
-    const postInZone = !!raw?.gate?.postInZone;
-    const blockTraining = !!raw?.gate?.blockTraining;
-
-    // Minimal "dose" model so the switcher can run:
-    // - red = block training
-    // - green = post-breath in Ψ-band
-    // - amber = proceed but not in Ψ-band post-breath (e.g., pre was in-zone)
-    const dose = {
-      level: blockTraining ? 'red' : (postInZone ? 'green' : 'amber'),
-      sessions: blockTraining ? 0 : 1,
-      blocks: blockTraining ? 0 : 1,
-      recommendation: blockTraining
-        ? 'Recovery recommended today. Keep it light and try again tomorrow.'
-        : 'Proceed with training.'
-    };
-
-    return {
-      localDate: raw.timestamp ? localYYYYMMDD(new Date(raw.timestamp)) : localYYYYMMDD(),
-      postBreathMode,
-      dose,
-      timestamp: raw.timestamp,
-      // Keep original payload (optional, handy for debugging later)
-      rawZoneCheck: raw
-    };
-  }
-
-  // Unknown shape: return as-is (try to attach localDate if possible)
   return {
-    ...raw,
-    localDate:
-      raw.localDate ||
-      (raw.timestamp ? localYYYYMMDD(new Date(raw.timestamp)) : undefined)
+    localDate: ensuredLocalDate,
+    postBreathMode,
+    dose,
+    timestamp: raw.timestamp,
+    rawZoneCheck: raw
   };
 };
 
-// Helper to get latest Zone Check telemetry (always normalised)
 const getLatestZoneTelemetry = () => {
   try {
     const stored = localStorage.getItem('zoneCheckTelemetry');
