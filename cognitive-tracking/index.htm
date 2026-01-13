@@ -406,22 +406,24 @@
                 IQ Performance tests are one-time. The other measures can be taken pre and post training. Results are saved locally in your browser.
               </p>
 
-              <div className="btnRow">
-                <button
-                  className={"btn btnSecondary"}
-                  onClick={() => setState(prev => ({...prev, currentPhase:"pre"}))}
-                >
-                  Set phase: PRE
-                </button>
-                <button
-                  className={"btn btnSecondary"}
-                  onClick={() => setState(prev => ({...prev, currentPhase:"post"}))}
-                >
-                  Set phase: POST
-                </button>
-                <button className="btn btnPrimary" onClick={exportJSON}>Export JSON</button>
-                <button className="btn btnSecondary" onClick={importJSON}>Import JSON</button>
-              </div>
+<div className="btnRow">
+  <button
+    className={"btn " + (phase === "pre" ? "btnPrimary" : "btnSecondary")}
+    onClick={() => setState(prev => ({...prev, currentPhase:"pre"}))}
+  >
+    Set phase: PRE
+  </button>
+
+  <button
+    className={"btn " + (phase === "post" ? "btnPrimary" : "btnSecondary")}
+    onClick={() => setState(prev => ({...prev, currentPhase:"post"}))}
+  >
+    Set phase: POST
+  </button>
+
+  <button className="btn btnPrimary" onClick={exportJSON}>Export JSON</button>
+  <button className="btn btnSecondary" onClick={importJSON}>Import JSON</button>
+</div>
 
               <div className="danger" style={{marginTop:"10px"}}>
                 <p className="muted">
