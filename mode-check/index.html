@@ -85,57 +85,57 @@
     // -----------------------------
     // Breathing patterns (generated once)
     // -----------------------------
-    const makeRepeat = (n, seq) => Array.from({ length: n }, () => seq).flat();
 
-    const BREATH_PATTERNS = Object.freeze({
-      upshift: Object.freeze({
-        id: 'upshift',
-        name: 'Upshift',
-        description: 'Inhale-led breathing to gently raise engagement',
-        attentionCue: 'Anchor attention on the in-breath sensation. Return gently when distracted.',
-        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-        phases: [
-          ...makeRepeat(10, [
-            { label: 'Inhale', durationMs: 2000, kind: 'inhale' },
-            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
-          ]),
-          ...makeRepeat(14, [
-            { label: 'Inhale', durationMs: 3000, kind: 'inhale' },
-            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
-          ]),
-          ...makeRepeat(10, [
-            { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
-            { label: 'Exhale', durationMs: 3000, kind: 'exhale' }
-          ])
-        ]
-      }),
+  const makeRepeat = (n, seq) => Array.from({ length: n }, () => seq).flat();
 
-      amplify: Object.freeze({
-        id: 'amplify',
-        name: 'Amplify',
-        description: 'Slow-paced breathing to stabilise',
-        attentionCue: 'Track the smooth rhythm. Thoughts are normal. Notice them and return to the breath.',
-        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-        phases: makeRepeat(18, [
+  const BREATH_PATTERNS = Object.freeze({
+    upshift: Object.freeze({
+      id: 'upshift',
+      name: 'Upshift',
+      description: 'Inhale-led breathing to gently raise engagement. Breathe in through your nose, breathe out through your nose (or softly through your mouth if needed).',
+      attentionCue: 'Anchor attention on the in-breath sensation. Return gently when distracted.',
+      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+      phases: [
+        ...makeRepeat(10, [
+          { label: 'Inhale', durationMs: 2000, kind: 'inhale' },
+          { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+        ]),
+        ...makeRepeat(14, [
+          { label: 'Inhale', durationMs: 3000, kind: 'inhale' },
+          { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+        ]),
+        ...makeRepeat(10, [
           { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
-          { label: 'Exhale', durationMs: 6000, kind: 'exhale' }
+          { label: 'Exhale', durationMs: 3000, kind: 'exhale' }
         ])
-      }),
+      ]
+    }),
 
-      downshift: Object.freeze({
-        id: 'downshift',
-        name: 'Downshift',
-        description: 'Cyclic sighing to reduce arousal and overload',
-        attentionCue: 'Count the pattern: sip, sip, long sigh. If your mind races, return to the count.',
-        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-        phases: makeRepeat(20, [
-          { label: 'Inhale (1)', durationMs: 1000, kind: 'inhale' },
-          { label: 'Inhale (2)', durationMs: 1000, kind: 'inhale' },
-          { label: 'Sigh out', durationMs: 7000, kind: 'exhale' }
-        ])
-      })
-    });
+    amplify: Object.freeze({
+      id: 'amplify',
+      name: 'Amplify',
+      description: 'Slow-paced breathing to stabilise. Inhale through your nose, exhale through your nose (or softly through your mouth if needed).',
+      attentionCue: 'Track the smooth rhythm. Thoughts are normal. Notice them and return to the breath.',
+      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+      phases: makeRepeat(18, [
+        { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
+        { label: 'Exhale', durationMs: 6000, kind: 'exhale' }
+      ])
+    }),
 
+    downshift: Object.freeze({
+      id: 'downshift',
+      name: 'Downshift',
+      description: 'Cyclic sighing to reduce arousal and overload. Take two small “sip” inhales through your nose, then a long sigh out through your mouth.',
+      attentionCue: 'Count the pattern: sip, sip, long sigh. If your mind races, return to the count.',
+      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+      phases: makeRepeat(20, [
+        { label: 'Inhale (1)', durationMs: 1000, kind: 'inhale' },
+        { label: 'Inhale (2)', durationMs: 1000, kind: 'inhale' },
+        { label: 'Sigh out', durationMs: 7000, kind: 'exhale' }
+      ])
+    })
+  });
     const selectBreathingPattern = (primaryMode) => {
       if (primaryMode === 'SUB') return 'upshift';
       if (primaryMode === 'PSI') return 'amplify';
