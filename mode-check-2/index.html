@@ -9,23 +9,34 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Tailwind is optional now; keeping it for layout utilities only -->
+  <!-- Tailwind optional (kept for a few layout utilities only) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Shared branding CSS (controls colours, type, cards, buttons, topbar) -->
+  <!-- Shared branding CSS (source of truth for colours, typography, buttons, cards, layout) -->
   <link rel="stylesheet" href="/iq-assessments/branding/brand.css?v=2" />
 
   <style>
-    /* Keep these minimal so brand.css remains the source of truth */
-    body { margin: 0; padding: 0; font-family: var(--font, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif); }
+    /* Keep minimal so brand.css stays in control */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif);
+      background: var(--bg, transparent);
+    }
     input[type="range"] { accent-color: var(--deep, #2764B7); }
+
+    /* Small helpers that won't fight brand.css */
+    .center { display: flex; align-items: center; justify-content: center; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .muted { color: rgba(0,0,0,0.65); }
+    .strong { font-weight: 900; }
   </style>
 </head>
 
 <body>
   <div id="root"></div>
 
-  <!-- SINGLE Babel script: everything lives here -->
   <script type="text/babel" data-presets="env,react">
     const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
@@ -63,14 +74,14 @@
       DEP: 'Depleted overload'
     });
 
-    // Map classifier output to the simple gate used across the ecosystem
+    // Map classifier output to simple gate used across ecosystem
     const toZoneGate = (primaryMode) => {
       if (primaryMode === 'PSI') return 'in_band';
       if (primaryMode === 'SUB') return 'cold';
       return 'hot';
     };
 
-    // Suggest Type-1 capacity focus for the downstream Capacity Training Coach
+    // Suggest Type-1 capacity focus (shown as recommendation only in this free hook)
     const suggestedCapacityFromMode = (primaryMode) => {
       switch (primaryMode) {
         case 'SUB': return { primary: 'Hold', secondary: 'Update' };
@@ -83,59 +94,62 @@
     };
 
     // -----------------------------
-    // Breathing patterns (generated once)
+    // Breathing patterns
     // -----------------------------
+    const makeRepeat = (n, seq) => Array.from({ length: n }, () => seq).flat();
 
-  const makeRepeat = (n, seq) => Array.from({ length: n }, () => seq).flat();
+    const BREATH_PATTERNS = Object.freeze({
+      upshift: Object.freeze({
+        id: 'upshift',
+        name: 'Upshift',
+        description:
+          'Inhale-led breathing to gently raise engagement. Inhale through your nose. Exhale through your nose (or softly through your mouth if needed).',
+        attentionCue: 'Anchor attention on the in-breath sensation. Return gently when distracted.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: [
+          ...makeRepeat(10, [
+            { label: 'Inhale', durationMs: 2000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+          ]),
+          ...makeRepeat(14, [
+            { label: 'Inhale', durationMs: 3000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
+          ]),
+          ...makeRepeat(10, [
+            { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
+            { label: 'Exhale', durationMs: 3000, kind: 'exhale' }
+          ])
+        ]
+      }),
 
-  const BREATH_PATTERNS = Object.freeze({
-    upshift: Object.freeze({
-      id: 'upshift',
-      name: 'Upshift',
-      description: 'Inhale-led breathing to gently raise engagement. Breathe in through your nose, breathe out through your nose (or softly through your mouth if needed).',
-      attentionCue: 'Anchor attention on the in-breath sensation. Return gently when distracted.',
-      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-      phases: [
-        ...makeRepeat(10, [
-          { label: 'Inhale', durationMs: 2000, kind: 'inhale' },
-          { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
-        ]),
-        ...makeRepeat(14, [
-          { label: 'Inhale', durationMs: 3000, kind: 'inhale' },
-          { label: 'Exhale', durationMs: 2000, kind: 'exhale' }
-        ]),
-        ...makeRepeat(10, [
+      amplify: Object.freeze({
+        id: 'amplify',
+        name: 'Amplify',
+        description:
+          'Slow-paced breathing to stabilise. Inhale through your nose. Exhale through your nose (or softly through your mouth if needed).',
+        attentionCue: 'Track the smooth rhythm. Thoughts are normal. Notice them and return to the breath.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: makeRepeat(18, [
           { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
-          { label: 'Exhale', durationMs: 3000, kind: 'exhale' }
+          { label: 'Exhale', durationMs: 6000, kind: 'exhale' }
         ])
-      ]
-    }),
+      }),
 
-    amplify: Object.freeze({
-      id: 'amplify',
-      name: 'Amplify',
-      description: 'Slow-paced breathing to stabilise. Inhale through your nose, exhale through your nose (or softly through your mouth if needed).',
-      attentionCue: 'Track the smooth rhythm. Thoughts are normal. Notice them and return to the breath.',
-      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-      phases: makeRepeat(18, [
-        { label: 'Inhale', durationMs: 4000, kind: 'inhale' },
-        { label: 'Exhale', durationMs: 6000, kind: 'exhale' }
-      ])
-    }),
+      downshift: Object.freeze({
+        id: 'downshift',
+        name: 'Downshift',
+        description:
+          'Cyclic sighing to reduce arousal and overload. Take two small “sip” inhales through your nose, then a long sigh out through your mouth.',
+        attentionCue: 'Count the pattern: sip, sip, long sigh. If your mind races, return to the count.',
+        safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
+        phases: makeRepeat(20, [
+          { label: 'Inhale (1)', durationMs: 1000, kind: 'inhale' },
+          { label: 'Inhale (2)', durationMs: 1000, kind: 'inhale' },
+          { label: 'Sigh out', durationMs: 7000, kind: 'exhale' }
+        ])
+      })
+    });
 
-    downshift: Object.freeze({
-      id: 'downshift',
-      name: 'Downshift',
-      description: 'Cyclic sighing to reduce arousal and overload. Take two small “sip” inhales through your nose, then a long sigh out through your mouth.',
-      attentionCue: 'Count the pattern: sip, sip, long sigh. If your mind races, return to the count.',
-      safety: 'If you feel dizzy or unwell, stop and return to normal breathing.',
-      phases: makeRepeat(20, [
-        { label: 'Inhale (1)', durationMs: 1000, kind: 'inhale' },
-        { label: 'Inhale (2)', durationMs: 1000, kind: 'inhale' },
-        { label: 'Sigh out', durationMs: 7000, kind: 'exhale' }
-      ])
-    })
-  });
     const selectBreathingPattern = (primaryMode) => {
       if (primaryMode === 'SUB') return 'upshift';
       if (primaryMode === 'PSI') return 'amplify';
@@ -155,8 +169,61 @@
       { key: 'R', label: 'Stuckness', desc: 'Do you feel flexible, or stuck in one way of doing things even if it is not working?' }
     ]);
 
-    // IMPORTANT: Use an absolute URL if this relative path ever 404s.
-    const CAPACITY_TRAINING_COACH_URL = '../game-switcher/';
+    // -----------------------------
+    // Podia signup
+    // -----------------------------
+    const PODIA_FORM_ACTION = 'https://iqmindware.podia.com/email_lists/959268/subscriptions';
+
+    function PodiaSignup({ gate }) {
+      return (
+        <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
+          <div className="strong" style={{ fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>
+            Get access to the upgraded suite
+          </div>
+          <p className="p" style={{ marginTop: 6 }}>
+            Join the list to unlock the Capacity Training Coach + Tracking + the full guided far-transfer loop.
+          </p>
+
+          <form
+            action={PODIA_FORM_ACTION}
+            acceptCharset="UTF-8"
+            method="post"
+            className="stack"
+            style={{ marginTop: 10 }}
+          >
+            {/* Optional tags for filtering/segmentation (may be ignored by Podia depending on embed type) */}
+            <input type="hidden" name="tags[]" value="zone-coach" />
+            <input type="hidden" name="tags[]" value={`gate-${gate}`} />
+
+            <input
+              className="p-3 rounded-lg border border-gray-200"
+              type="text"
+              name="name"
+              placeholder="Name"
+              autoComplete="name"
+            />
+            <input
+              className="p-3 rounded-lg border border-gray-200"
+              type="email"
+              name="email"
+              required
+              placeholder="Email"
+              autoComplete="email"
+            />
+            <input
+              className="btn btnPrimary"
+              type="submit"
+              value="Join"
+              style={{ width: '100%' }}
+            />
+          </form>
+
+          <p className="p" style={{ marginTop: 8 }}>
+            Your Zone check is saved locally in this browser.
+          </p>
+        </div>
+      );
+    }
 
     // -----------------------------
     // Classifier helpers
@@ -192,15 +259,48 @@
     }
 
     // -----------------------------
-    // Breathing Coach component (branded + safe audio)
+    // Branded Frame
+    // -----------------------------
+    function Frame({ brand, chip, children }) {
+      return (
+        <div className="screen">
+          <div className="topbar">
+            <div className="brandleft">
+              <div className="icon">
+                <img
+                  src={brand.logoSrc}
+                  alt="Trident icon"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </div>
+              <div>
+                <p className="title">{brand.appName}</p>
+                <p className="subtitle">{brand.subtitle}</p>
+              </div>
+            </div>
+            <div className="chip">{chip}</div>
+          </div>
+
+          <div className="content">{children}</div>
+
+          <div className="footer">
+            <span>Mindware Lab • Trident</span>
+            <span className="muted">Zone Coach</span>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------
+    // Breathing Coach component (single central window)
     // -----------------------------
     function BreathingCoach({ patternId, onComplete, brand }) {
       const pattern = BREATH_PATTERNS[patternId];
 
-      const size = 260;
+      const size = 270;
       const centre = size / 2;
-      const minR = 54;
-      const maxR = 96;
+      const minR = 56;
+      const maxR = 100;
       const stroke = 10;
 
       const targetMs = 180000; // 3 minutes
@@ -350,552 +450,477 @@
       const ringRest = ringC - ringFill;
 
       return (
-        <div className="screen">
-          <div className="topbar">
-            <div className="brandleft">
-              <div className="icon">
-                <img
-                  src={brand?.logoSrc}
-                  alt="Trident logo"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              </div>
+        <Frame brand={brand} chip="Reset">
+          <div className="card" style={{ maxWidth: 720, margin: '0 auto' }}>
+            {/* Text ABOVE the circle */}
+            <div className="stack">
               <div>
-                <p className="title">{brand?.appName || 'Zone Coach'}</p>
-                <p className="subtitle">{brand?.subtitle || 'Quick state check → mindful reset → start training'}</p>
-              </div>
-            </div>
-            <div className="chip">Reset</div>
-          </div>
+                <div className="h1" style={{ marginBottom: 6 }}>{pattern.name}</div>
+                <p className="p">{pattern.description}</p>
 
-          <div className="content">
-            <div className="card">
-              <div className="h1">{pattern.name}</div>
-              <p className="p">{pattern.description}</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-                <div className="card" style={{ flex: '1 1 260px', boxShadow: 'none' }}>
-                  <div className="p" style={{ fontWeight: 800, color: 'var(--deep)' }}>Time remaining</div>
-                  <div className="h1" style={{ fontSize: 28, marginTop: 6, color: 'var(--deep)' }}>
-                    {mm}:{String(ss).padStart(2, '0')}
+                <div className="row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
+                  <div className="muted">
+                    <span className="strong" style={{ color: 'var(--deep, #2764B7)' }}>Time remaining:</span>{' '}
+                    <span className="strong">{mm}:{String(ss).padStart(2, '0')}</span>
                   </div>
-                  <p className="p" style={{ marginTop: 6 }}>{pattern.attentionCue}</p>
-                </div>
-
-                <div className="card" style={{ flex: '1 1 260px', boxShadow: 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                      <circle cx={centre} cy={centre} r={maxR} fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth={stroke} />
-                      <circle cx={centre} cy={centre} r={ringR} fill="none" stroke="rgba(0,0,0,0.10)" strokeWidth={6} />
-                      <circle
-                        cx={centre}
-                        cy={centre}
-                        r={ringR}
-                        fill="none"
-                        stroke="var(--deep)"
-                        strokeOpacity="0.55"
-                        strokeWidth={6}
-                        strokeLinecap="round"
-                        strokeDasharray={`${ringFill} ${ringRest}`}
-                        transform={`rotate(-90 ${centre} ${centre})`}
-                      />
-                      <circle
-                        cx={centre}
-                        cy={centre}
-                        r={displayRadius}
-                        fill="none"
-                        stroke="var(--deep)"
-                        strokeOpacity="0.95"
-                        strokeWidth={stroke}
-                      />
-                      <text x={centre} y={centre} textAnchor="middle" fontSize="20" fontWeight="800" fill="rgba(0,0,0,0.85)">
-                        {phaseLabel}
-                      </text>
-                    </svg>
+                  <div className="muted">
+                    <span className="strong" style={{ color: 'rgba(0,0,0,0.80)' }}>Cue:</span>{' '}
+                    <span>{pattern.attentionCue}</span>
                   </div>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={pingEnabled}
-                      onChange={(e) => setPingEnabled(e.target.checked)}
-                    />
-                    <span className="p" style={{ margin: 0, color: 'rgba(0,0,0,0.80)', fontWeight: 800 }}>
-                      Ping at high/low points
-                    </span>
-                  </label>
-
-                  {!audioReady && pingEnabled && (
-                    <div className="p" style={{ marginTop: 8 }}>
-                      Audio pings may be unavailable in this browser until interaction is allowed.
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="card" style={{ marginTop: 12, background: 'rgba(204,255,102,0.18)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                <div className="p" style={{ fontWeight: 900, color: 'rgba(0,0,0,0.85)' }}>Safety</div>
-                <div className="p" style={{ marginTop: 6, color: 'rgba(0,0,0,0.78)' }}>{pattern.safety}</div>
+              {/* Circle CENTRE */}
+              <div className="center" style={{ marginTop: 6 }}>
+                <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-label="Breathing guide">
+                  <circle cx={centre} cy={centre} r={maxR} fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth={stroke} />
+                  <circle cx={centre} cy={centre} r={ringR} fill="none" stroke="rgba(0,0,0,0.10)" strokeWidth={6} />
+                  <circle
+                    cx={centre}
+                    cy={centre}
+                    r={ringR}
+                    fill="none"
+                    stroke="var(--deep, #2764B7)"
+                    strokeOpacity="0.55"
+                    strokeWidth={6}
+                    strokeLinecap="round"
+                    strokeDasharray={`${ringFill} ${ringRest}`}
+                    transform={`rotate(-90 ${centre} ${centre})`}
+                  />
+                  <circle
+                    cx={centre}
+                    cy={centre}
+                    r={displayRadius}
+                    fill="none"
+                    stroke="var(--deep, #2764B7)"
+                    strokeOpacity="0.95"
+                    strokeWidth={stroke}
+                  />
+                  <text x={centre} y={centre} textAnchor="middle" fontSize="20" fontWeight="900" fill="rgba(0,0,0,0.85)">
+                    {phaseLabel}
+                  </text>
+                </svg>
               </div>
 
-              <div className="btnRow">
-                {!running ? (
-                  <button onClick={start} className="btn btnPrimary" style={{ flex: '1 1 220px' }}>
-                    Start 3-minute reset
-                  </button>
-                ) : (
-                  <button onClick={stop} className="btn btnSecondary" style={{ flex: '1 1 220px' }}>
-                    Stop
-                  </button>
+              {/* Controls BELOW the circle */}
+              <div className="stack">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={pingEnabled}
+                    onChange={(e) => setPingEnabled(e.target.checked)}
+                    aria-label="Enable pings"
+                  />
+                  <span className="p" style={{ margin: 0, fontWeight: 900, color: 'rgba(0,0,0,0.80)' }}>
+                    Ping at high/low points
+                  </span>
+                </label>
+
+                {!audioReady && pingEnabled && (
+                  <div className="p" style={{ marginTop: 0 }}>
+                    Audio pings may be unavailable in this browser until interaction is allowed.
+                  </div>
                 )}
 
-                <button onClick={() => { stop(); onComplete?.(); }} className="btn btnSecondary" style={{ flex: '1 1 220px' }}>
-                  I’m done
-                </button>
+                <div className="card" style={{ background: 'rgba(204,255,102,0.16)', border: '1px solid rgba(0,0,0,0.06)', boxShadow: 'none' }}>
+                  <div className="strong" style={{ color: 'rgba(0,0,0,0.85)', fontSize: 13 }}>Safety</div>
+                  <div className="p" style={{ marginTop: 6 }}>{pattern.safety}</div>
+                </div>
+
+                <div className="btnRow">
+                  {!running ? (
+                    <button onClick={start} className="btn btnPrimary" style={{ flex: '1 1 220px' }}>
+                      Start 3-minute reset
+                    </button>
+                  ) : (
+                    <button onClick={stop} className="btn btnSecondary" style={{ flex: '1 1 220px' }}>
+                      Stop
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => { stop(); onComplete?.(); }}
+                    className="btn btnSecondary"
+                    style={{ flex: '1 1 220px' }}
+                  >
+                    I’m done
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="footer">
-            <span>Mindware Lab • Trident</span>
-            <a className="link" href={CAPACITY_TRAINING_COACH_URL} target="_blank" rel="noreferrer">Capacity Coach</a>
-          </div>
-        </div>
+        </Frame>
       );
     }
 
- // -----------------------------
-// ZoneCoach app (BRANDED)
-// -----------------------------
-function ZoneCoach() {
-  const [showSplash, setShowSplash] = useState(true);
-  const [step, setStep] = useState('ratings');
+    // -----------------------------
+    // ZoneCoach app (BRANDED)
+    // -----------------------------
+    function ZoneCoach() {
+      const [showSplash, setShowSplash] = useState(true);
+      const [step, setStep] = useState('ratings');
 
-  const [ratings, setRatings] = useState({ E: 5, S: 5, F: 5, N: 5, O: 5, C: 5, R: 5 });
-  const [externalDistractions, setExternalDistractions] = useState(false);
+      const [ratings, setRatings] = useState({ E: 5, S: 5, F: 5, N: 5, O: 5, C: 5, R: 5 });
+      const [externalDistractions, setExternalDistractions] = useState(false);
 
-  const [classification, setClassification] = useState(null);
-  const [breathPattern, setBreathPattern] = useState(null);
-  const [postBreathReport, setPostBreathReport] = useState(null);
+      const [classification, setClassification] = useState(null);
+      const [breathPattern, setBreathPattern] = useState(null);
+      const [postBreathReport, setPostBreathReport] = useState(null);
 
-  const brand = useMemo(() => ({
-    appName: 'Zone Coach',
-    subtitle: 'Quick state check → mindful reset → start training',
-    accent: 'var(--deep)',
-    logoSrc: '/iq-assessments/branding/Trident-Icon.svg'
-  }), []);
+      const brand = useMemo(() => ({
+        appName: 'Zone Coach',
+        subtitle: 'Quick state check → mindful reset → start training',
+        logoSrc: '/iq-assessments/branding/Trident-Icon.svg' // NOTE: no trailing slash
+      }), []);
 
-  const safeJsonParse = (s, fallback) => {
-    try { return JSON.parse(s); } catch { return fallback; }
-  };
-
-  const writeZoneTelemetry = (zoneTelemetry, zoneHandoffSlim) => {
-    try {
-      const history = safeJsonParse(localStorage.getItem(LS_KEYS.ZONE_HISTORY) || '[]', []);
-      history.push(zoneTelemetry);
-      while (history.length > 30) history.shift();
-      localStorage.setItem(LS_KEYS.ZONE_HISTORY, JSON.stringify(history));
-
-      localStorage.setItem(LS_KEYS.ZONE_LAST, JSON.stringify(zoneTelemetry));
-
-      // Slim handoff for capacity coach
-      localStorage.setItem(LS_KEYS.CAPACITY_FROM_ZONE, JSON.stringify(zoneHandoffSlim));
-
-      // Cross-app fallback handoff (helps older/newer coach variants)
-      const fallback = {
-        schemaVersion: 'mw_handoff_v1',
-        timestamp: zoneTelemetry.timestamp,
-        zone: zoneHandoffSlim.gate.zone, // cold | in_band | hot
-        recommendation: zoneHandoffSlim.gate.recommendation, // proceed | light
-        capacityFocus: zoneTelemetry.suggest?.capacityFocus || null,
-        rigourBudget: zoneTelemetry.suggest?.rigourBudget || null,
-        timeboxMins: zoneTelemetry.suggest?.timeboxMins || null
+      const safeJsonParse = (s, fallback) => {
+        try { return JSON.parse(s); } catch { return fallback; }
       };
-      localStorage.setItem(FALLBACK_CAPACITY_KEY, JSON.stringify(fallback));
-    } catch (e) {
-      console.error('Storage error:', e);
-    }
-  };
 
-  const handleRatingsSubmit = () => {
-    const result = classifyMode(ratings, externalDistractions);
-    const pattern = selectBreathingPattern(result.primaryMode);
-    setClassification(result);
-    setBreathPattern(pattern);
-    setStep('results');
-  };
+      const writeZoneTelemetry = (zoneTelemetry, zoneHandoffSlim) => {
+        try {
+          const history = safeJsonParse(localStorage.getItem(LS_KEYS.ZONE_HISTORY) || '[]', []);
+          history.push(zoneTelemetry);
+          while (history.length > 30) history.shift();
+          localStorage.setItem(LS_KEYS.ZONE_HISTORY, JSON.stringify(history));
 
-  const handleStartBreathing = () => setStep('breathing');
-  const handleBreathingComplete = () => setStep('postBreath');
+          localStorage.setItem(LS_KEYS.ZONE_LAST, JSON.stringify(zoneTelemetry));
 
-  const handlePostBreathSubmit = (report) => {
-    setPostBreathReport(report);
+          // Slim handoff (saved, but the free hook does not link out to the coach)
+          localStorage.setItem(LS_KEYS.CAPACITY_FROM_ZONE, JSON.stringify(zoneHandoffSlim));
 
-    const zoneGate = toZoneGate(classification.primaryMode);
+          // Cross-app fallback handoff
+          const fallback = {
+            schemaVersion: 'mw_handoff_v1',
+            timestamp: zoneTelemetry.timestamp,
+            zone: zoneHandoffSlim.gate.zone, // cold | in_band | hot
+            recommendation: zoneHandoffSlim.gate.recommendation, // proceed | light
+            capacityFocus: zoneTelemetry.suggest?.capacityFocus || null,
+            rigourBudget: zoneTelemetry.suggest?.rigourBudget || null,
+            timeboxMins: zoneTelemetry.suggest?.timeboxMins || null
+          };
+          localStorage.setItem(FALLBACK_CAPACITY_KEY, JSON.stringify(fallback));
+        } catch (e) {
+          console.error('Storage error:', e);
+        }
+      };
 
-    const preInBand = classification.primaryMode === 'PSI';
-    const postInBand = report === 'Ψ-band';
-    const proceedNormal = postInBand || preInBand;
+      const handleRatingsSubmit = () => {
+        const result = classifyMode(ratings, externalDistractions);
+        const pattern = selectBreathingPattern(result.primaryMode);
+        setClassification(result);
+        setBreathPattern(pattern);
+        setStep('results');
+      };
 
-    const derived = {
-      N_eff: classification.N_eff,
-      pressure: (ratings.S + ratings.O) / 2,
-      interference: (ratings.N + ratings.C) / 2,
-      load: (ratings.O + ratings.C + ratings.R) / 3,
-      stability: (ratings.F + (10 - ratings.R)) / 2
-    };
+      const handleStartBreathing = () => setStep('breathing');
+      const handleBreathingComplete = () => setStep('postBreath');
 
-    const suggestedCapacity = suggestedCapacityFromMode(classification.primaryMode);
+      const handlePostBreathSubmit = (report) => {
+        setPostBreathReport(report);
 
-    const zoneTelemetry = {
-      schemaVersion: 'zone_v1',
-      timestamp: new Date().toISOString(),
-      ratings,
-      externalDistractions,
-      derived,
-      classifier: {
-        primaryMode: classification.primaryMode,
-        label: MODE_LABELS[classification.primaryMode],
-        modeProbs: classification.modeProbs,
-        confidence: classification.confidence
-      },
-      breathing: {
-        patternId: breathPattern,
-        patternName: BREATH_PATTERNS[breathPattern].name,
-        completed: true,
-        postBreathSelfReport: report
-      },
-      gate: {
-        zone: zoneGate, // cold|in_band|hot
-        preInBand,
-        postInBand,
-        recommendation: proceedNormal ? 'proceed' : 'light'
-      },
-      suggest: {
-        rigourBudget: zoneGate === 'in_band' ? 'medium' : 'low',
-        timeboxMins: zoneGate === 'in_band' ? 10 : 8,
-        capacityFocus: suggestedCapacity
-      }
-    };
+        const zoneGate = toZoneGate(classification.primaryMode);
+        const preInBand = classification.primaryMode === 'PSI';
+        const postInBand = report === 'Ψ-band';
+        const proceedNormal = postInBand || preInBand;
 
-    const zoneHandoffSlim = {
-      schemaVersion: 'zone_to_capacity_v1',
-      timestamp: zoneTelemetry.timestamp,
-      gate: {
-        zone: zoneTelemetry.gate.zone,
-        preInBand: zoneTelemetry.gate.preInBand,
-        postInBand: zoneTelemetry.gate.postInBand,
-        recommendation: zoneTelemetry.gate.recommendation
-      },
-      suggest: zoneTelemetry.suggest
-    };
+        const derived = {
+          N_eff: classification.N_eff,
+          pressure: (ratings.S + ratings.O) / 2,
+          interference: (ratings.N + ratings.C) / 2,
+          load: (ratings.O + ratings.C + ratings.R) / 3,
+          stability: (ratings.F + (10 - ratings.R)) / 2
+        };
 
-    writeZoneTelemetry(zoneTelemetry, zoneHandoffSlim);
-    setStep('complete');
-  };
+        const suggestedCapacity = suggestedCapacityFromMode(classification.primaryMode);
 
-  const startNewCheck = () => {
-    setStep('ratings');
-    setPostBreathReport(null);
-    setClassification(null);
-    setBreathPattern(null);
-  };
+        const zoneTelemetry = {
+          schemaVersion: 'zone_v1',
+          timestamp: new Date().toISOString(),
+          ratings,
+          externalDistractions,
+          derived,
+          classifier: {
+            primaryMode: classification.primaryMode,
+            label: MODE_LABELS[classification.primaryMode],
+            modeProbs: classification.modeProbs,
+            confidence: classification.confidence
+          },
+          breathing: {
+            patternId: breathPattern,
+            patternName: BREATH_PATTERNS[breathPattern].name,
+            completed: true,
+            postBreathSelfReport: report
+          },
+          gate: {
+            zone: zoneGate, // cold|in_band|hot
+            preInBand,
+            postInBand,
+            recommendation: proceedNormal ? 'proceed' : 'light'
+          },
+          suggest: {
+            rigourBudget: zoneGate === 'in_band' ? 'medium' : 'low',
+            timeboxMins: zoneGate === 'in_band' ? 10 : 8,
+            capacityFocus: suggestedCapacity
+          }
+        };
 
-  // ----- Shared frame (topbar + footer) -----
-  const Frame = ({ chip, children }) => (
-    <div className="screen">
-      <div className="topbar">
-        <div className="brandleft">
-          <div className="icon">
-            <img
-              src={brand.logoSrc}
-              alt="Trident logo"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          </div>
-          <div>
-            <p className="title">{brand.appName}</p>
-            <p className="subtitle">{brand.subtitle}</p>
-          </div>
-        </div>
-        <div className="chip">{chip}</div>
-      </div>
+        const zoneHandoffSlim = {
+          schemaVersion: 'zone_to_capacity_v1',
+          timestamp: zoneTelemetry.timestamp,
+          gate: {
+            zone: zoneTelemetry.gate.zone,
+            preInBand: zoneTelemetry.gate.preInBand,
+            postInBand: zoneTelemetry.gate.postInBand,
+            recommendation: zoneTelemetry.gate.recommendation
+          },
+          suggest: zoneTelemetry.suggest
+        };
 
-      <div className="content">{children}</div>
+        writeZoneTelemetry(zoneTelemetry, zoneHandoffSlim);
+        setStep('complete');
+      };
 
-      <div className="footer">
-        <span>Mindware Lab • Trident</span>
-        <a className="link" href={CAPACITY_TRAINING_COACH_URL} target="_blank" rel="noreferrer">
-          Capacity Coach
-        </a>
-      </div>
-    </div>
-  );
+      const startNewCheck = () => {
+        setStep('ratings');
+        setPostBreathReport(null);
+        setClassification(null);
+        setBreathPattern(null);
+      };
 
-  // ----- Splash -----
-  if (showSplash) {
-    return (
-      <div className="screen">
-        <div className="topbar">
-          <div className="brandleft">
-            <div className="icon">
-              <img
-                src={brand.logoSrc}
-                alt="Trident logo"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            </div>
-            <div>
-              <p className="title">{brand.appName}</p>
-              <p className="subtitle">{brand.subtitle}</p>
-            </div>
-          </div>
-          <div className="chip">Start</div>
-        </div>
-
-        <div className="content" style={{ justifyContent: 'center' }}>
-          <div className="card" style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-              <div className="icon" style={{ width: 64, height: 64, borderRadius: 18 }}>
-                <img
-                  src={brand.logoSrc}
-                  alt="Trident logo"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              </div>
-            </div>
-
-            <div className="h1" style={{ fontSize: 26, marginBottom: 8 }}>{brand.appName}</div>
-            <p className="p" style={{ fontSize: 14 }}>{brand.subtitle}</p>
-
-            <div className="btnRow" style={{ justifyContent: 'center' }}>
-              <button className="btn btnPrimary" style={{ width: 'min(360px, 100%)' }} onClick={() => setShowSplash(false)}>
-                Continue
-              </button>
-            </div>
-
-            <p className="p" style={{ marginTop: 10 }}>Mindware Lab • Trident</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ----- Breathing -----
-  if (step === 'breathing') {
-    return (
-      <BreathingCoach
-        patternId={breathPattern}
-        onComplete={handleBreathingComplete}
-        brand={brand}
-      />
-    );
-  }
-
-  // ----- Main flow -----
-  return (
-    <Frame chip={step === 'ratings' ? 'Check' : step === 'results' ? 'Result' : step === 'postBreath' ? 'Report' : 'Next'}>
-      <div className="card" style={{ maxWidth: 820, margin: '0 auto' }}>
-
-        {step === 'ratings' && (
-          <>
-            <div className="h1">Zone check</div>
-            <p className="p">Rate how you feel right now (0 = not at all, 10 = extremely).</p>
-
-            <div style={{ marginTop: 10 }}>
-              {SLIDERS.map(s => (
-                <div key={s.key} className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                    <div style={{ fontWeight: 900, fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>{s.label}</div>
-                    <div style={{ fontWeight: 900, color: 'var(--deep)' }}>{ratings[s.key]}</div>
-                  </div>
-                  <p className="p" style={{ marginTop: 6 }}>{s.desc}</p>
-
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    value={ratings[s.key]}
-                    onChange={(e) => setRatings({ ...ratings, [s.key]: parseInt(e.target.value, 10) })}
-                    style={{ width: '100%', marginTop: 8 }}
+      // Splash
+      if (showSplash) {
+        return (
+          <Frame brand={brand} chip="Start">
+            <div className="card" style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
+              <div className="center" style={{ marginBottom: 12 }}>
+                <div className="icon" style={{ width: 68, height: 68, borderRadius: 18 }}>
+                  <img
+                    src={brand.logoSrc}
+                    alt="Trident icon"
+                    onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 </div>
-              ))}
-            </div>
-
-            <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={externalDistractions}
-                  onChange={(e) => setExternalDistractions(e.target.checked)}
-                  style={{ marginTop: 2 }}
-                />
-                <span className="p" style={{ margin: 0, color: 'rgba(0,0,0,0.80)', fontWeight: 800 }}>
-                  Notifications, noise, people, or interruptions are affecting me right now
-                </span>
-              </label>
-            </div>
-
-            <div className="btnRow">
-              <button onClick={handleRatingsSubmit} className="btn btnPrimary" style={{ width: '100%' }}>
-                Analyse my state
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 'results' && classification && (
-          <>
-            <div className="h1">Your current state</div>
-
-            <div className="card" style={{ boxShadow: 'none', background: 'rgba(34,170,255,0.08)', border: '1px solid rgba(39,100,183,0.18)', marginTop: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: 'rgba(0,0,0,0.90)' }}>
-                {MODE_LABELS[classification.primaryMode]}
               </div>
-              <p className="p" style={{ marginTop: 6 }}>Confidence: <span style={{ fontWeight: 900, color: 'var(--deep)' }}>{classification.confidence}</span></p>
-            </div>
 
-            <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>Recommended reset</div>
-              <div style={{ fontWeight: 900, fontSize: 16, color: 'var(--deep)', marginTop: 6 }}>
-                {BREATH_PATTERNS[breathPattern].name}
-              </div>
-              <p className="p" style={{ marginTop: 6 }}>{BREATH_PATTERNS[breathPattern].description}</p>
-              <p className="p" style={{ marginTop: 8 }}>Do the 3-minute reset, then we will decide the best training intensity.</p>
+              <div className="h1" style={{ fontSize: 26, marginBottom: 8 }}>{brand.appName}</div>
+              <p className="p" style={{ fontSize: 14 }}>{brand.subtitle}</p>
 
-              <div className="btnRow">
-                <button onClick={handleStartBreathing} className="btn btnPrimary" style={{ width: '100%' }}>
-                  Start 3-minute reset
-                </button>
-                <button onClick={startNewCheck} className="btn btnSecondary" style={{ width: '100%' }}>
-                  Back
+              <div className="btnRow" style={{ justifyContent: 'center' }}>
+                <button className="btn btnPrimary" style={{ width: 'min(360px, 100%)' }} onClick={() => setShowSplash(false)}>
+                  Continue
                 </button>
               </div>
+
+              <p className="p" style={{ marginTop: 10 }}>Mindware Lab • Trident</p>
             </div>
-          </>
-        )}
+          </Frame>
+        );
+      }
 
-        {step === 'postBreath' && (
-          <>
-            <div className="h1">How do you feel now?</div>
-            <p className="p">Quick check after your breathing reset.</p>
+      // Breathing step (single central window)
+      if (step === 'breathing') {
+        return (
+          <BreathingCoach
+            patternId={breathPattern}
+            onComplete={handleBreathingComplete}
+            brand={brand}
+          />
+        );
+      }
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-              {[
-                { label: 'Flat / low drive', value: 'Subcritical' },
-                { label: 'In the zone', value: 'Ψ-band' },
-                { label: 'Overloaded & scattered', value: 'Supercritical – explore' },
-                { label: 'Over-tight & stuck', value: 'Supercritical – rigid control' },
-                { label: 'Not sure', value: 'Not sure' }
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => handlePostBreathSubmit(opt.value)}
-                  className="btn btnSecondary"
-                  style={{ textAlign: 'left', width: '100%' }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+      // Main flow
+      return (
+        <Frame
+          brand={brand}
+          chip={step === 'ratings' ? 'Check' : step === 'results' ? 'Result' : step === 'postBreath' ? 'Report' : 'Next'}
+        >
+          <div className="card" style={{ maxWidth: 820, margin: '0 auto' }}>
 
-        {step === 'complete' && classification && (
-          <>
-            <div className="h1">Reset complete ✓</div>
+            {step === 'ratings' && (
+              <>
+                <div className="h1">Zone check</div>
+                <p className="p">Rate how you feel right now (0 = not at all, 10 = extremely).</p>
 
-            <div className="card" style={{ boxShadow: 'none', background: 'rgba(34,170,255,0.08)', border: '1px solid rgba(39,100,183,0.18)', marginTop: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 16, color: 'rgba(0,0,0,0.90)' }}>
-                Post-breath: <span style={{ color: 'var(--deep)' }}>{postBreathReport}</span>
-              </div>
-            </div>
+                <div style={{ marginTop: 10 }}>
+                  {SLIDERS.map(s => (
+                    <div key={s.key} className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+                        <div className="strong" style={{ fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>{s.label}</div>
+                        <div className="strong" style={{ color: 'var(--deep, #2764B7)' }}>{ratings[s.key]}</div>
+                      </div>
+                      <p className="p" style={{ marginTop: 6 }}>{s.desc}</p>
 
-            {(() => {
-              const zoneGate = toZoneGate(classification.primaryMode);
-              const preInBand = classification.primaryMode === 'PSI';
-              const postInBand = postBreathReport === 'Ψ-band';
-              const proceedNormal = preInBand || postInBand;
+                      <input
+                        type="range"
+                        min="0"
+                        max="10"
+                        value={ratings[s.key]}
+                        onChange={(e) => setRatings({ ...ratings, [s.key]: parseInt(e.target.value, 10) })}
+                        style={{ width: '100%', marginTop: 8 }}
+                        aria-label={s.label}
+                      />
+                    </div>
+                  ))}
+                </div>
 
-              const suggestion = suggestedCapacityFromMode(classification.primaryMode);
-
-              return (
                 <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
-                  <div style={{ fontWeight: 900, fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>Next step</div>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={externalDistractions}
+                      onChange={(e) => setExternalDistractions(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                      aria-label="External distractions"
+                    />
+                    <span className="p" style={{ margin: 0, color: 'rgba(0,0,0,0.80)', fontWeight: 800 }}>
+                      Notifications, noise, people, or interruptions are affecting me right now
+                    </span>
+                  </label>
+                </div>
 
+                <div className="btnRow">
+                  <button onClick={handleRatingsSubmit} className="btn btnPrimary" style={{ width: '100%' }}>
+                    Analyse my state
+                  </button>
+                </div>
+              </>
+            )}
+
+            {step === 'results' && classification && (
+              <>
+                <div className="h1">Your current state</div>
+
+                <div className="card" style={{
+                  boxShadow: 'none',
+                  background: 'rgba(34,170,255,0.08)',
+                  border: '1px solid rgba(39,100,183,0.18)',
+                  marginTop: 12
+                }}>
+                  <div className="strong" style={{ fontSize: 18, color: 'rgba(0,0,0,0.90)' }}>
+                    {MODE_LABELS[classification.primaryMode]}
+                  </div>
+                  <p className="p" style={{ marginTop: 6 }}>
+                    Confidence: <span className="strong" style={{ color: 'var(--deep, #2764B7)' }}>{classification.confidence}</span>
+                  </p>
+                </div>
+
+                <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
+                  <div className="strong" style={{ fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>Recommended reset</div>
+                  <div className="strong" style={{ fontSize: 16, color: 'var(--deep, #2764B7)', marginTop: 6 }}>
+                    {BREATH_PATTERNS[breathPattern].name}
+                  </div>
+                  <p className="p" style={{ marginTop: 6 }}>{BREATH_PATTERNS[breathPattern].description}</p>
                   <p className="p" style={{ marginTop: 8 }}>
-                    Zone gate: <span style={{ fontWeight: 900, color: 'rgba(0,0,0,0.90)' }}>{zoneGate.replace('_', ' ')}</span>
-                    <span style={{ color: 'var(--grey-600)' }}> • Suggested focus: </span>
-                    <span style={{ fontWeight: 900, color: 'rgba(0,0,0,0.90)' }}>{suggestion.primary}</span>
-                    {suggestion.secondary ? <span style={{ color: 'var(--grey-600)' }}> then </span> : null}
-                    {suggestion.secondary ? <span style={{ fontWeight: 900, color: 'rgba(0,0,0,0.90)' }}>{suggestion.secondary}</span> : null}
+                    Do the 3-minute reset, then we will decide the best training intensity.
                   </p>
 
-                  {proceedNormal ? (
-                    <>
-                      <p className="p" style={{ marginTop: 8, color: 'rgba(0,0,0,0.80)', fontWeight: 800 }}>
-                        Proceed with training.
-                      </p>
-                      <div className="btnRow">
-                        <button
-                          onClick={() => window.open(CAPACITY_TRAINING_COACH_URL, '_blank')}
-                          className="btn btnPrimary"
-                          style={{ width: '100%' }}
-                        >
-                          Go to Capacity Training Coach
-                        </button>
-                      </div>
-                      <p className="p" style={{ marginTop: 8 }}>
-                        Your zone handoff has been saved for the coach/switcher.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="p" style={{ marginTop: 8, color: 'rgba(0,0,0,0.80)', fontWeight: 800 }}>
-                        Light session recommended.
-                      </p>
-                      <p className="p" style={{ marginTop: 6 }}>
-                        You were not fully in band today. Keep it short and stabilising.
-                      </p>
-
-                      <div className="btnRow">
-                        <button
-                          onClick={() => window.open(CAPACITY_TRAINING_COACH_URL, '_blank')}
-                          className="btn btnPrimary"
-                          style={{ width: '100%' }}
-                        >
-                          Proceed with a light session (Recover focus)
-                        </button>
-                      </div>
-
-                      <div className="card" style={{ boxShadow: 'none', marginTop: 10 }}>
-                        <p className="p" style={{ margin: 0 }}>
-                          If you still feel overloaded: walk, hydration, low stimulation, early night. Try again tomorrow.
-                        </p>
-                      </div>
-
-                      <p className="p" style={{ marginTop: 8 }}>
-                        Your zone handoff has been saved for the coach/switcher.
-                      </p>
-                    </>
-                  )}
-
                   <div className="btnRow">
+                    <button onClick={handleStartBreathing} className="btn btnPrimary" style={{ width: '100%' }}>
+                      Start 3-minute reset
+                    </button>
                     <button onClick={startNewCheck} className="btn btnSecondary" style={{ width: '100%' }}>
-                      Start new check
+                      Back
                     </button>
                   </div>
                 </div>
-              );
-            })()}
-          </>
-        )}
+              </>
+            )}
 
-      </div>
-    </Frame>
-  );
-}
+            {step === 'postBreath' && (
+              <>
+                <div className="h1">How do you feel now?</div>
+                <p className="p">Quick check after your breathing reset.</p>
 
-// React 18 root
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<ZoneCoach />);
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                  {[
+                    { label: 'Flat / low drive', value: 'Subcritical' },
+                    { label: 'In the zone', value: 'Ψ-band' },
+                    { label: 'Overloaded & scattered', value: 'Supercritical – explore' },
+                    { label: 'Over-tight & stuck', value: 'Supercritical – rigid control' },
+                    { label: 'Not sure', value: 'Not sure' }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handlePostBreathSubmit(opt.value)}
+                      className="btn btnSecondary"
+                      style={{ textAlign: 'left', width: '100%' }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {step === 'complete' && classification && (
+              <>
+                <div className="h1">Reset complete ✓</div>
+
+                <div className="card" style={{
+                  boxShadow: 'none',
+                  background: 'rgba(34,170,255,0.08)',
+                  border: '1px solid rgba(39,100,183,0.18)',
+                  marginTop: 12
+                }}>
+                  <div className="strong" style={{ fontSize: 16, color: 'rgba(0,0,0,0.90)' }}>
+                    Post-breath: <span style={{ color: 'var(--deep, #2764B7)' }}>{postBreathReport}</span>
+                  </div>
+                </div>
+
+                {(() => {
+                  const zoneGate = toZoneGate(classification.primaryMode);
+                  const preInBand = classification.primaryMode === 'PSI';
+                  const postInBand = postBreathReport === 'Ψ-band';
+                  const proceedNormal = preInBand || postInBand;
+
+                  const suggestion = suggestedCapacityFromMode(classification.primaryMode);
+
+                  return (
+                    <div className="card" style={{ boxShadow: 'none', marginTop: 12 }}>
+                      <div className="strong" style={{ fontSize: 14, color: 'rgba(0,0,0,0.85)' }}>
+                        Next step
+                      </div>
+
+                      <p className="p" style={{ marginTop: 8 }}>
+                        Zone gate: <span className="strong" style={{ color: 'rgba(0,0,0,0.90)' }}>{zoneGate.replace('_', ' ')}</span>
+                        <span className="muted"> • Suggested focus: </span>
+                        <span className="strong" style={{ color: 'rgba(0,0,0,0.90)' }}>{suggestion.primary}</span>
+                        {suggestion.secondary ? <span className="muted"> then </span> : null}
+                        {suggestion.secondary ? <span className="strong" style={{ color: 'rgba(0,0,0,0.90)' }}>{suggestion.secondary}</span> : null}
+                      </p>
+
+                      {proceedNormal ? (
+                        <p className="p" style={{ marginTop: 8, fontWeight: 800 }}>
+                          You’re good to train. To run the full session (Capacity Coach + full far-transfer loop), request access below.
+                        </p>
+                      ) : (
+                        <p className="p" style={{ marginTop: 8, fontWeight: 800 }}>
+                          Light day recommended. Keep it short and stabilising today. Request access below.
+                        </p>
+                      )}
+
+                      <PodiaSignup gate={zoneGate} />
+
+                      <div className="btnRow">
+                        <button onClick={startNewCheck} className="btn btnSecondary" style={{ width: '100%' }}>
+                          Start new check
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+
+          </div>
+        </Frame>
+      );
+    }
+
+    // React 18 root
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ZoneCoach />);
+  </script>
+</body>
+</html>
